@@ -116,7 +116,7 @@ Staff records the amount received and its method/date/note against the correct i
 - "Revenue" needs a team decision before implementation: recommended dashboard definition is cash collected in the selected period, with invoiced and outstanding amounts shown separately.
 - Taxes are configured as simple percentage rules for the MVP unless the team has a required jurisdiction-specific rule set.
 - Invoice sending and password-reset delivery require an email provider. For a demo, a development mail catcher or clearly labeled simulated send can be used if live email credentials are unavailable.
-- The brief does not specify stack, currency, timezone, proration, refunds, accounting exports, or multi-company support. Keep the MVP single-company and make currency/timezone explicit in configuration.
+- The brief does not specify currency, timezone, proration, refunds, accounting exports, or multi-company support. The selected stack is recorded in `docs/adr/ADR-004-selected-mvp-stack.md`. Keep the MVP single-company and make currency/timezone explicit in configuration.
 - Password wording says "more than eight characters"; implement minimum length 9.
 
 ## 8. MVP acceptance checklist

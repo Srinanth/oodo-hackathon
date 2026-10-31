@@ -7,6 +7,7 @@ This tracker is the shared source of truth for ownership and completion. Statuse
 | ID | Feature | Primary owner | Priority | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|---|---|
 | SETUP-01 | Project planning and repository workflow baseline | Srinanth | P0 | - | PRD, architecture, API contract, ADRs, tracker, and workspace rules are available; team branch structure is bootstrapped from this baseline | Done |
+| STACK-01 | Select and document MVP technology stack | Srinanth | P0 | SETUP-01 | Backend, frontend, database, deployment shape, cost/performance tradeoffs, and scale path are recorded in architecture and ADR | Done |
 | AUTH-01 | Customer registration, sign-in, unique email, password policy, reset flow | Srinanth | P0 | - | Customer can register/sign in; duplicate normalized email is rejected; passwords meet brief; reset token is single-use and expires | Not started |
 | AUTH-02 | Roles, authorization policies, admin-created staff | Srinanth | P0 | AUTH-01 | Admin/staff/customer permissions enforced server-side; only admin creates staff; customer cannot read another customer's records | Not started |
 | CAT-01 | Product catalog and variants | Srinanth | P0 | AUTH-02 | Admin can create/edit product and variant; sales/cost price and notes persist; configurable variant adjustment is reflected in preview price | Not started |

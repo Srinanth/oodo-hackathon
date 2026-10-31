@@ -8,32 +8,51 @@ See [API.md](API.md) for endpoint contracts, [FEATURE_TRACKER.md](FEATURE_TRACKE
 
 ## 1. Architecture direction
 
-Use a **modular monolith**: one web application, one API/backend, and one relational database, with clear domain modules. This is a good fit for a short hackathon because the team can work in parallel without operating multiple services or distributed transactions. Keep module boundaries explicit so domains can be split later if needed.
+Use a **modular monolith**: one React web client, one Django API/backend, and one PostgreSQL database, with clear domain modules. This fits the short hackathon schedule while keeping billing, subscription changes, and invoice creation inside reliable database transactions. Keep module boundaries explicit so domains can scale independently later if needed.
 
-The brief does not prescribe a technology stack. The design below is technology-neutral; agree on the stack before implementation and preserve the entities, boundaries, and behaviors in this document.
+### Selected stack
+
+| Layer | Choice | Why it fits this project |
+|---|---|---|
+| Backend | Python 3.13, Django 5.2 LTS, Django REST Framework | Django supplies authentication, ORM, migrations, security protections, and a useful admin for configuration/debugging. DRF provides serializers, permissions, pagination, and the JSON API already described in `API.md`. Django 5.2 is the current LTS line with security support through April 2028. |
+| Frontend | React + TypeScript + Vite + Tailwind CSS | Component-based staff workflows and a polished finance dashboard/customer portal; type checking helps three people work against shared API contracts. Tailwind generates static CSS at build time, and Vite builds assets that can be served from the same application origin. |
+| Database | PostgreSQL 18 with Psycopg 3 | Relational constraints and transactions protect invoice/subscription integrity; indexes and SQL aggregation support the reporting workload. PostgreSQL 18 is currently supported through November 2030. |
+| Local development | Docker Compose for Django and PostgreSQL; Node package manager for the Vite client | Gives all three contributors the same database and startup path without requiring paid infrastructure. |
+| Production/demo | Gunicorn + Django/DRF + WhiteNoise in one web service; one small managed PostgreSQL database | Keeps service count and deployment cost low; WhiteNoise serves the built React/static assets, and one origin simplifies session authentication and CSRF. Use the smallest reliable paid database/web tier available to the team and scale only when measured demand requires it. |
+
+Use the latest patch release in the selected supported series and commit dependency lock files. The PDF does not require an Odoo module or name Odoo as an implementation platform; this decision is for a standalone application. If the organizers later require an Odoo module, revisit ADR-004 before coding.
+
+### Runtime and deployment shape
+
+- The React app calls the versioned Django REST API on the same origin. Django serves the built SPA entry point and WhiteNoise serves collected, fingerprinted static assets; in development, Vite proxies `/api` to Django.
+- Use Django session authentication with secure, HTTP-only cookies and CSRF protection. Avoid a separately hosted frontend and long-lived browser tokens in the MVP.
+- Run recurring billing as an idempotent Django management command, triggered manually for the demo and by one platform cron job when scheduled runs are needed. Do not add Celery, Redis, or a separate worker until real asynchronous workload justifies the added service and operations.
+- Use PostgreSQL as the source of truth for billing, payment, and subscription state. A billing run claims a subscription-period row/unique key and creates its invoice plus next due date in one transaction.
+- Use PostgreSQL aggregation, pagination, and indexes for finance reports. Add a cache only after profiling shows a repeated expensive query; the specified volume is thousands of subscriptions.
+- Deploy one web replica initially. The web process remains stateless apart from PostgreSQL-backed state, so more replicas can be added behind a load balancer when demand grows. Keep uploads/object storage out of the MVP unless a real requirement appears.
 
 ## 2. System context
 
 ```mermaid
 flowchart LR
-  Admin[Administrator] --> UI[Staff web app]
+  Admin[Administrator] --> UI[React staff app]
   Staff[Internal staff] --> UI
-  Customer[Customer] --> Portal[Customer portal]
-  UI --> API[Application API]
+  Customer[Customer] --> Portal[React customer portal]
+  UI --> API[Django REST API]
   Portal --> API
   API --> Auth[Identity and access]
   API --> Catalog[Catalog and pricing]
   API --> Sales[Quotes and subscriptions]
   API --> Billing[Billing and invoices]
   API --> Finance[Payments and reporting]
-  Auth --> DB[(Relational database)]
+  Auth --> DB[(PostgreSQL)]
   Catalog --> DB
   Sales --> DB
   Billing --> DB
   Finance --> DB
   Billing --> Mail[Email/PDF adapter]
   Auth --> Mail
-  Scheduler[Billing scheduler / admin-triggered job] --> Billing
+  Scheduler[Platform cron / manual run] --> Billing
 ```
 
 ## 3. Module ownership and work split
@@ -170,7 +189,7 @@ Use consistent server-side authorization for every operation. Customer-scoped en
 
 ## 8. Suggested integration sequence
 
-1. Agree on stack, currency/timezone, entity IDs, money representation, and lifecycle enums.
+1. Set up Python/Django/DRF, React/Vite, PostgreSQL, Docker Compose, and the shared currency/timezone, IDs, money representation, and lifecycle enums.
 2. Create application shell, database schema, auth/roles, and seed/demo data.
 3. Integrate catalog/plan pricing with quote and subscription creation.
 4. Integrate subscription state and next-billing-date contract with recurring billing.
@@ -180,8 +199,9 @@ Use consistent server-side authorization for every operation. Customer-scoped en
 
 ## 9. Decisions to confirm as a team
 
-- Chosen stack and whether the project is a standalone application or an Odoo module.
 - Single currency and business timezone for the demo.
 - Whether to implement invoice PDF/email delivery or show an in-app simulated send.
 - Whether discounts are consumed on invoice creation or invoice confirmation; recommended: consume atomically when an invoice is confirmed.
 - Whether subscription cancellation takes effect immediately or at period end; support both if time permits and make the effective date visible.
+
+The stack choice and standalone-app direction are recorded in [ADR-004](adr/ADR-004-selected-mvp-stack.md).

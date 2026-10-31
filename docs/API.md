@@ -1,10 +1,10 @@
 # API Contract (Draft)
 
-This is the shared HTTP API contract for the MVP. Paths use `/api/v1`; JSON is UTF-8. The technology stack is not selected yet, so these are logical HTTP operations and payload shapes rather than framework-specific code.
+This is the shared HTTP API contract for the MVP. Paths use `/api/v1`; JSON is UTF-8. The implementation is Django REST Framework with a same-origin React client, as recorded in [ADR-004](adr/ADR-004-selected-mvp-stack.md).
 
 ## Conventions
 
-- Authenticate with a secure session cookie or bearer token. Never accept a customer ID from the client as proof of ownership.
+- Authenticate the same-origin browser app with Django sessions in secure, HTTP-only cookies and CSRF tokens on unsafe requests. Never accept a customer ID from the client as proof of ownership.
 - Require authorization on the server for every operation. Admin-only configuration and staff creation are explicitly marked.
 - Use opaque IDs in URLs. Normalize email before uniqueness checks.
 - Dates are ISO 8601. Timestamps include timezone offsets and are stored in UTC. Business billing dates use the configured business timezone.
@@ -12,6 +12,7 @@ This is the shared HTTP API contract for the MVP. Paths use `/api/v1`; JSON is U
 - Paginate list endpoints with `limit` and `cursor`; return `items` and `nextCursor`.
 - Mutations validate state transitions and return the updated resource. Use an idempotency key for retryable commands such as billing-run creation and quote conversion.
 - Errors use a stable shape: `{"error":{"code":"VALIDATION_ERROR","message":"Readable summary","fieldErrors":{"email":"Already in use"},"requestId":"..."}}`.
+- The frontend and API are served from one origin in the MVP. Vite proxies `/api` to Django locally; do not add cross-origin token storage or CORS configuration unless a separate client becomes a real requirement.
 
 ## Identity and access
 
