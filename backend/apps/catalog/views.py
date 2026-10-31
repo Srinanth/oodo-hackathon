@@ -1,6 +1,6 @@
 import uuid
 
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -8,8 +8,10 @@ from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.accounts.permissions import IsAdministrator, IsStaffReadAdminWrite
-from apps.catalog.models import Plan, Product, ProductVariant, TaxRule
+from apps.accounts.permissions import IsAdministrator, IsStaffOrAdministrator, IsStaffReadAdminWrite
+from apps.catalog.models import DiscountRedemption, DiscountRule, Plan, Product, ProductVariant, TaxRule
+from apps.catalog.discount_serializers import DiscountPreviewSerializer, DiscountRuleSerializer
+from apps.catalog.discount_services import evaluate_discount
 from apps.catalog.plan_serializers import PlanSerializer
 from apps.catalog.tax_serializers import TaxPreviewSerializer, TaxRuleSerializer
 from apps.catalog.tax_services import calculate_tax, tax_snapshot
@@ -221,4 +223,81 @@ def tax_rule_preview(request, tax_rule_id):
             "taxAmount": str(snapshot["amount"]),
             "currency": data["currency"],
         } if snapshot else None,
+    })
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated, IsStaffReadAdminWrite])
+def discount_rules(request):
+    if request.method == "GET":
+        limit, cursor = _page_params(request)
+        queryset = DiscountRule.objects.annotate(
+            active_uses_count=Count(
+                "redemptions",
+                filter=Q(redemptions__status__in=(DiscountRedemption.Status.RESERVED, DiscountRedemption.Status.CONSUMED)),
+            )
+        ).prefetch_related("products").order_by("id")
+        if cursor:
+            queryset = queryset.filter(id__gt=cursor)
+        search = request.query_params.get("search", "").strip()
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+        page = list(queryset[: limit + 1])
+        has_more = len(page) > limit
+        page = page[:limit]
+        return Response({
+            "items": DiscountRuleSerializer(page, many=True).data,
+            "nextCursor": str(page[-1].id) if has_more and page else None,
+        })
+
+    serializer = DiscountRuleSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    rule = serializer.save()
+    return Response(DiscountRuleSerializer(rule).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated, IsStaffReadAdminWrite])
+def discount_rule_detail(request, discount_rule_id):
+    try:
+        rule = DiscountRule.objects.prefetch_related("products").get(pk=discount_rule_id)
+    except DiscountRule.DoesNotExist as exc:
+        raise NotFound("Discount rule not found.") from exc
+    if request.method == "GET":
+        return Response(DiscountRuleSerializer(rule).data)
+    serializer = DiscountRuleSerializer(rule, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    return Response(DiscountRuleSerializer(serializer.save()).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsStaffOrAdministrator])
+def discount_rule_preview(request, discount_rule_id):
+    try:
+        rule = DiscountRule.objects.prefetch_related("products").get(pk=discount_rule_id)
+    except DiscountRule.DoesNotExist as exc:
+        raise NotFound("Discount rule not found.") from exc
+    serializer = DiscountPreviewSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    lines = serializer.validated_data["lines"]
+    product_ids = {line["productId"] for line in lines}
+    found = set(Product.objects.filter(id__in=product_ids, is_active=True).values_list("id", flat=True))
+    if found != product_ids:
+        raise ValidationError({"lines": "Every line must reference an active product."})
+    evaluated_at = serializer.validated_data.get("evaluatedAt", timezone.now())
+    result = evaluate_discount(rule, lines, evaluated_at=evaluated_at)
+    return Response({
+        "ruleId": str(rule.id),
+        "name": rule.name,
+        "discountType": rule.discount_type,
+        "value": str(rule.value),
+        "eligible": result["eligible"],
+        "reason": result["reason"],
+        "eligibleAmount": str(result["eligibleAmount"]),
+        "eligibleQuantity": result["eligibleQuantity"],
+        "discountAmount": str(result["discountAmount"]),
+        "currency": result["currency"],
+        "usesCount": rule.redemptions.filter(status__in=(DiscountRedemption.Status.RESERVED, DiscountRedemption.Status.CONSUMED)).count(),
+        "usesRemaining": result["usesRemaining"],
+        "evaluatedAt": evaluated_at,
     })

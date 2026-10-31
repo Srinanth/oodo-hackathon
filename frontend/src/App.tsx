@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import AuthPage, { type AuthMode } from './features/auth/AuthPage'
 import CatalogPage from './features/catalog/CatalogPage'
+import DiscountsPage from './features/discounts/DiscountsPage'
 import PlansPage from './features/plans/PlansPage'
 import StaffPage from './features/staff/StaffPage'
 import TaxPage from './features/tax/TaxPage'
@@ -106,6 +107,9 @@ function App() {
   }
 
   if (user) {
+    if (path.replace(/\/+$/, '') === '/discount-rules' && ['admin', 'staff'].includes(user.role)) {
+      return <DiscountsPage isAdmin={user.role === 'admin'} onBack={() => navigate('/app')} />
+    }
     if (path.replace(/\/+$/, '') === '/tax-rules' && ['admin', 'staff'].includes(user.role)) {
       return <TaxPage isAdmin={user.role === 'admin'} onBack={() => navigate('/app')} />
     }
@@ -150,6 +154,15 @@ function App() {
                   className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-100"
                 >
                   Product catalog
+                </button>
+              )}
+              {['admin', 'staff'].includes(user.role) && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/discount-rules')}
+                  className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-100"
+                >
+                  Discounts
                 </button>
               )}
               {['admin', 'staff'].includes(user.role) && (

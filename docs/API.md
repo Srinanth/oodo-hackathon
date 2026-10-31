@@ -56,7 +56,9 @@ Password-reset submission uses `{"uid":"...","token":"...","newPassword":"..."}`
 | `GET/POST /tax-rules` | Staff read / Admin write | Search/list or create tax rules |
 | `GET/PATCH /tax-rules/{taxRuleId}` | Staff read / Admin write | Read, update, or deactivate a tax rule |
 | `GET /tax-rules/{taxRuleId}/preview?amount=100.00&currency=USD&onDate=2026-11-01` | Staff | Calculate an eligible tax amount and return snapshot fields |
-| `GET/POST /discount-rules` | Staff read / Admin write | List or create discount rules |
+| `GET/POST /discount-rules` | Staff read / Admin write | Search/list or create discount rules |
+| `GET/PATCH /discount-rules/{discountRuleId}` | Staff read / Admin write | Read, update, or deactivate a discount rule |
+| `POST /discount-rules/{discountRuleId}/preview` | Staff | Evaluate rule eligibility and calculate a discount preview |
 | `POST /pricing/preview` | Staff | Calculate quote/line price, tax, and discount preview |
 
 Product example:
@@ -96,6 +98,8 @@ Plan listing accepts `limit` (default 25, maximum 100), opaque `cursor`, and opt
 Intervals: `daily`, `weekly`, `monthly`, `yearly`. End policy: `close_at_end` or `renew_until_closed`. Discount type: `fixed` or `percentage`; scope: `products` or `whole_subscription`. Tax and discount eligibility is evaluated server-side and snapshotted on invoice lines.
 
 Tax rule listing uses the common `limit`, opaque `cursor`, and name `search` parameters. Create requires `name` and `ratePercent` (0 to 100, up to four decimal places); optional inclusive `activeFrom`/`activeUntil` dates constrain eligibility, and `activeUntil` must be on or after `activeFrom`. Preview accepts a non-negative decimal `amount`, three-letter `currency`, and optional `onDate` (defaults to the business-local current date). It returns the base, rate, tax, total, and a snapshot containing the rule name/rate/tax amount; inactive or out-of-window rules return `applies:false` and zero tax. Tax is rounded to two decimal places using half-up rounding. Quote and invoice writers use the shared `tax_snapshot` service to persist the rule name, rate, and calculated amount at the time of pricing.
+
+Discount rules support `fixed` or `percentage` values, a minimum purchase and quantity, inclusive start/end timestamps, a maximum use count, and either selected product IDs or `whole_subscription` scope. Fixed values require a currency; percentage values are limited to 100 and do not store a currency. Product-scoped rules require at least one active product. Create accepts `name`, `discountType`, `value`, `scope`, and optional `currency`, `productIds`, `minimumPurchase`, `minimumQuantity`, `startsAt`, `endsAt`, `maximumUses`, and `isActive`. `minimumPurchase` is a decimal string in the line currency. The preview body contains `lines:[{productId,amount,currency,quantity}]` where amount is the pre-discount line total. Only targeted lines contribute to a product-scoped rule; all lines contribute to a whole-subscription rule. The response identifies eligibility/reason, eligible amount/quantity, calculated discount, and uses remaining. Fixed and percentage discounts are capped at the eligible subtotal and rounded half-up to two decimals. Invoice generation reserves a use; confirmation consumes it and cancellation of an unconfirmed invoice releases it. Reservation is idempotent by rule and invoice, and row locking enforces the cap under concurrent requests. The redemption ledger stores the invoice UUID until the billing app adds the invoice model and its foreign key migration.
 
 ## Customers, quotes, and subscriptions
 
