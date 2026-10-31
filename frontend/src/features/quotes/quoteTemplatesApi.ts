@@ -34,3 +34,10 @@ export function createQuoteTemplate(template: QuoteTemplateInput) {
     body: JSON.stringify(template),
   })
 }
+
+export function updateQuoteTemplate(id: string, template: QuoteTemplateInput) {
+  return apiFetch<QuoteTemplate>(`quote-templates/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(template),
+  })
+}

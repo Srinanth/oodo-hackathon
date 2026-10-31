@@ -17,7 +17,7 @@ class QuoteTemplateViewSet(ModelViewSet):
     serializer_class = QuoteTemplateSerializer
     permission_classes = (IsAuthenticated, CanManageQuoteTemplates)
     pagination_class = QuoteTemplateCursorPagination
-    http_method_names = ("get", "post", "head", "options")
+    http_method_names = ("get", "post", "patch", "head", "options")
 
     def handle_exception(self, exc):
         response = exception_handler(exc, self.get_exception_handler_context())

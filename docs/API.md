@@ -87,7 +87,8 @@ Intervals: `daily`, `weekly`, `monthly`, `yearly`. End policy: `close_at_end` or
 | `GET/POST /customers` | Staff | Search or create customer |
 | `GET/PATCH /customers/{customerId}` | Staff | Read or update customer |
 | `GET /portal/customer` | Customer | Read the customer linked to the authenticated account |
-| `GET/POST /quote-templates` | Staff read / Admin write | List or manage reusable templates |
+| `GET/POST /quote-templates` | Staff read / Admin write | List or create reusable templates |
+| `GET/PATCH /quote-templates/{templateId}` | Staff read / Admin write | Read or update a template header |
 | `GET/POST /quotes` | Staff | List or create quotes |
 | `GET/PATCH /quotes/{quoteId}` | Staff | Read or update a draft quote |
 | `POST /quotes/{quoteId}/send` | Staff | Send quotation / mark sent |

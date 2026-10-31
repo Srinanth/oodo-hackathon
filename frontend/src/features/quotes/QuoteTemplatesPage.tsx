@@ -1,7 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { ApiError } from '../../lib/api'
-import { createQuoteTemplate, getQuoteTemplates, type QuoteTemplate } from './quoteTemplatesApi'
+import {
+  createQuoteTemplate,
+  getQuoteTemplates,
+  updateQuoteTemplate,
+  type QuoteTemplate,
+} from './quoteTemplatesApi'
 
 function errorMessage(error: unknown) {
   if (error instanceof ApiError) return error.message
@@ -11,6 +16,7 @@ function errorMessage(error: unknown) {
 
 function QuoteTemplatesPage() {
   const [templates, setTemplates] = useState<QuoteTemplate[]>([])
+  const [editing, setEditing] = useState<QuoteTemplate | null>(null)
   const [search, setSearch] = useState('')
   const [cursor, setCursor] = useState<string | null>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -21,6 +27,24 @@ function QuoteTemplatesPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+
+  function startCreate() {
+    setEditing(null)
+    setName('')
+    setValidityDays('14')
+    setPaymentTerms('')
+    setError(null)
+    setNotice(null)
+  }
+
+  function startEdit(template: QuoteTemplate) {
+    setEditing(template)
+    setName(template.name)
+    setValidityDays(String(template.validityDays))
+    setPaymentTerms(template.paymentTerms)
+    setError(null)
+    setNotice(null)
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -47,12 +71,19 @@ function QuoteTemplatesPage() {
     setError(null)
     setNotice(null)
     try {
-      await createQuoteTemplate({
+      const input = {
         name: name.trim(),
         validityDays: Number(validityDays),
         paymentTerms: paymentTerms.trim(),
-      })
-      setNotice('Quotation template created.')
+      }
+      if (editing) {
+        await updateQuoteTemplate(editing.id, input)
+        setNotice('Quotation template updated.')
+      } else {
+        await createQuoteTemplate(input)
+        setNotice('Quotation template created.')
+      }
+      setEditing(null)
       setName('')
       setValidityDays('14')
       setPaymentTerms('')
@@ -113,9 +144,18 @@ function QuoteTemplatesPage() {
                     <h3 className="font-medium text-slate-900">{template.name}</h3>
                     <p className="mt-1 text-sm text-slate-500">{template.paymentTerms || 'No payment terms'}</p>
                   </div>
-                  <div className="rounded-xl bg-indigo-50 px-3 py-2 text-right">
-                    <p className="text-lg font-semibold text-indigo-700">{template.validityDays}</p>
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-indigo-500">validity days</p>
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-xl bg-indigo-50 px-3 py-2 text-right">
+                      <p className="text-lg font-semibold text-indigo-700">{template.validityDays}</p>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-indigo-500">validity days</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(template)}
+                      className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      Edit
+                    </button>
                   </div>
                 </article>
               ))}
@@ -135,8 +175,17 @@ function QuoteTemplatesPage() {
           </section>
 
           <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-600">New template</p>
-            <h2 className="mt-1 text-lg font-semibold">Reusable quote terms</h2>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-600">{editing ? 'Template details' : 'New template'}</p>
+                <h2 className="mt-1 text-lg font-semibold">{editing ? 'Edit template' : 'Reusable quote terms'}</h2>
+              </div>
+              {editing && (
+                <button type="button" onClick={startCreate} className="text-xs font-medium text-slate-500 hover:text-slate-900">
+                  Clear
+                </button>
+              )}
+            </div>
             <form onSubmit={saveTemplate} className="mt-5 space-y-4">
               <label className="block">
                 <span className="mb-1.5 block text-sm font-medium text-slate-700">Template name <span className="text-rose-500">*</span></span>
@@ -154,7 +203,7 @@ function QuoteTemplatesPage() {
                 <textarea maxLength={200} rows={3} value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)} placeholder="Net 30" className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" />
               </label>
               <button disabled={saving} type="submit" className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
-                {saving ? 'Saving…' : 'Create template'}
+                {saving ? 'Saving…' : editing ? 'Save changes' : 'Create template'}
               </button>
             </form>
           </aside>
