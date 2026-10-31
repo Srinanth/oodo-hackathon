@@ -17,3 +17,12 @@ This folder is the React + TypeScript + Vite + Tailwind CSS client. Keep fronten
 - Keep customer views scoped by the backend session; client route guards are only a usability feature, never authorization.
 
 The Vite app scaffold and feature code have not been generated yet. The feature tracker identifies the frontend deliverable for each owner.
+
+
+## Local Development Commands
+
+-   To run the frontend locally:
+    -   Open a terminal in this `frontend/` directory
+    -   Run: `npm run dev`
+-   This will start the Vite dev server, usually at `http://localhost:5173`
+-   The app will automatically proxy API requests (e.g., `/api/*`) to your Django backend (default port 8000)
