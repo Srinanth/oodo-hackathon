@@ -15,6 +15,9 @@ urlpatterns = [
     path("products/<uuid:product_id>/variants/<uuid:variant_id>", catalog_views.product_variant_detail, name="variant-detail"),
     path("plans", catalog_views.plans, name="plan-list-create"),
     path("plans/<uuid:plan_id>", catalog_views.plan_detail, name="plan-detail"),
+    path("tax-rules", catalog_views.tax_rules, name="tax-rule-list-create"),
+    path("tax-rules/<uuid:tax_rule_id>", catalog_views.tax_rule_detail, name="tax-rule-detail"),
+    path("tax-rules/<uuid:tax_rule_id>/preview", catalog_views.tax_rule_preview, name="tax-rule-preview"),
     path(
         "auth/password-reset-requests",
         account_views.password_reset_request,

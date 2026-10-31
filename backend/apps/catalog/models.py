@@ -88,3 +88,25 @@ class Plan(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class TaxRule(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=160)
+    rate_percent = models.DecimalField(max_digits=7, decimal_places=4)
+    active_from = models.DateField(null=True, blank=True)
+    active_until = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "tax_rule"
+        ordering = ("name", "id")
+        constraints = [
+            models.CheckConstraint(condition=Q(rate_percent__gte=0, rate_percent__lte=100), name="tax_rule_rate_range"),
+            models.CheckConstraint(condition=Q(active_until__isnull=True) | Q(active_from__isnull=True) | Q(active_until__gte=models.F("active_from")), name="tax_rule_date_ordered"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.rate_percent}%)"

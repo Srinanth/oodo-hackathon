@@ -53,7 +53,9 @@ Password-reset submission uses `{"uid":"...","token":"...","newPassword":"..."}`
 | `PATCH /products/{productId}/variants/{variantId}` | Admin | Update or deactivate a variant |
 | `GET/POST /plans` | Staff read / Admin write | Search/list or create plans |
 | `GET/PATCH /plans/{planId}` | Staff read / Admin write | Read, update, or deactivate a plan |
-| `GET/POST /tax-rules` | Staff read / Admin write | List or create tax rules |
+| `GET/POST /tax-rules` | Staff read / Admin write | Search/list or create tax rules |
+| `GET/PATCH /tax-rules/{taxRuleId}` | Staff read / Admin write | Read, update, or deactivate a tax rule |
+| `GET /tax-rules/{taxRuleId}/preview?amount=100.00&currency=USD&onDate=2026-11-01` | Staff | Calculate an eligible tax amount and return snapshot fields |
 | `GET/POST /discount-rules` | Staff read / Admin write | List or create discount rules |
 | `POST /pricing/preview` | Staff | Calculate quote/line price, tax, and discount preview |
 
@@ -92,6 +94,8 @@ Plan listing accepts `limit` (default 25, maximum 100), opaque `cursor`, and opt
 ```
 
 Intervals: `daily`, `weekly`, `monthly`, `yearly`. End policy: `close_at_end` or `renew_until_closed`. Discount type: `fixed` or `percentage`; scope: `products` or `whole_subscription`. Tax and discount eligibility is evaluated server-side and snapshotted on invoice lines.
+
+Tax rule listing uses the common `limit`, opaque `cursor`, and name `search` parameters. Create requires `name` and `ratePercent` (0 to 100, up to four decimal places); optional inclusive `activeFrom`/`activeUntil` dates constrain eligibility, and `activeUntil` must be on or after `activeFrom`. Preview accepts a non-negative decimal `amount`, three-letter `currency`, and optional `onDate` (defaults to the business-local current date). It returns the base, rate, tax, total, and a snapshot containing the rule name/rate/tax amount; inactive or out-of-window rules return `applies:false` and zero tax. Tax is rounded to two decimal places using half-up rounding. Quote and invoice writers use the shared `tax_snapshot` service to persist the rule name, rate, and calculated amount at the time of pricing.
 
 ## Customers, quotes, and subscriptions
 

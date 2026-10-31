@@ -3,6 +3,7 @@ import AuthPage, { type AuthMode } from './features/auth/AuthPage'
 import CatalogPage from './features/catalog/CatalogPage'
 import PlansPage from './features/plans/PlansPage'
 import StaffPage from './features/staff/StaffPage'
+import TaxPage from './features/tax/TaxPage'
 import {
   getCurrentUser,
   prepareCsrf,
@@ -105,6 +106,9 @@ function App() {
   }
 
   if (user) {
+    if (path.replace(/\/+$/, '') === '/tax-rules' && ['admin', 'staff'].includes(user.role)) {
+      return <TaxPage isAdmin={user.role === 'admin'} onBack={() => navigate('/app')} />
+    }
     if (path.replace(/\/+$/, '') === '/plans' && ['admin', 'staff'].includes(user.role)) {
       return <PlansPage isAdmin={user.role === 'admin'} onBack={() => navigate('/app')} />
     }
@@ -146,6 +150,15 @@ function App() {
                   className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-100"
                 >
                   Product catalog
+                </button>
+              )}
+              {['admin', 'staff'].includes(user.role) && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/tax-rules')}
+                  className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-100"
+                >
+                  Tax rules
                 </button>
               )}
               {['admin', 'staff'].includes(user.role) && (

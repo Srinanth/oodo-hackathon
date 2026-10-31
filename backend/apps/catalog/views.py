@@ -1,6 +1,7 @@
 import uuid
 
 from django.db.models import Q
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import NotFound, ValidationError
@@ -8,8 +9,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.accounts.permissions import IsAdministrator, IsStaffReadAdminWrite
-from apps.catalog.models import Plan, Product, ProductVariant
+from apps.catalog.models import Plan, Product, ProductVariant, TaxRule
 from apps.catalog.plan_serializers import PlanSerializer
+from apps.catalog.tax_serializers import TaxPreviewSerializer, TaxRuleSerializer
+from apps.catalog.tax_services import calculate_tax, tax_snapshot
 from apps.catalog.serializers import (
     ProductSerializer,
     ProductVariantCreateSerializer,
@@ -146,3 +149,76 @@ def plan_detail(request, plan_id):
     serializer = PlanSerializer(plan, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     return Response(PlanSerializer(serializer.save()).data)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated, IsStaffReadAdminWrite])
+def tax_rules(request):
+    if request.method == "GET":
+        limit, cursor = _page_params(request)
+        queryset = TaxRule.objects.order_by("id")
+        if cursor:
+            queryset = queryset.filter(id__gt=cursor)
+        search = request.query_params.get("search", "").strip()
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+        page = list(queryset[: limit + 1])
+        has_more = len(page) > limit
+        page = page[:limit]
+        return Response({
+            "items": TaxRuleSerializer(page, many=True).data,
+            "nextCursor": str(page[-1].id) if has_more and page else None,
+        })
+
+    serializer = TaxRuleSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    rule = serializer.save()
+    return Response(TaxRuleSerializer(rule).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated, IsStaffReadAdminWrite])
+def tax_rule_detail(request, tax_rule_id):
+    try:
+        rule = TaxRule.objects.get(pk=tax_rule_id)
+    except TaxRule.DoesNotExist as exc:
+        raise NotFound("Tax rule not found.") from exc
+    if request.method == "GET":
+        return Response(TaxRuleSerializer(rule).data)
+    serializer = TaxRuleSerializer(rule, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    return Response(TaxRuleSerializer(serializer.save()).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsStaffReadAdminWrite])
+def tax_rule_preview(request, tax_rule_id):
+    try:
+        rule = TaxRule.objects.get(pk=tax_rule_id)
+    except TaxRule.DoesNotExist as exc:
+        raise NotFound("Tax rule not found.") from exc
+
+    serializer = TaxPreviewSerializer(data=request.query_params)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    on_date = data.get("onDate", timezone.localdate())
+    applies = rule.is_active and (rule.active_from is None or rule.active_from <= on_date) and (rule.active_until is None or rule.active_until >= on_date)
+    tax_amount = calculate_tax(data["amount"], rule.rate_percent) if applies else calculate_tax(data["amount"], 0)
+    snapshot = tax_snapshot(rule, data["amount"]) if applies else None
+    return Response({
+        "ruleId": str(rule.id),
+        "name": rule.name,
+        "onDate": on_date,
+        "applies": applies,
+        "baseAmount": str(data["amount"]),
+        "ratePercent": str(rule.rate_percent),
+        "taxAmount": str(tax_amount),
+        "totalAmount": str(data["amount"] + tax_amount),
+        "currency": data["currency"],
+        "snapshot": {
+            "name": snapshot["name_snapshot"],
+            "ratePercent": str(snapshot["rate_percent_snapshot"]),
+            "taxAmount": str(snapshot["amount"]),
+            "currency": data["currency"],
+        } if snapshot else None,
+    })
