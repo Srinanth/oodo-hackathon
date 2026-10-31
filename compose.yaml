@@ -1,0 +1,55 @@
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: subscription_db
+      POSTGRES_USER: subscription_app
+      POSTGRES_PASSWORD: local-dev-only
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U subscription_app -d subscription_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"]
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: postgresql://subscription_app:local-dev-only@db:5432/subscription_db
+      DJANGO_DEBUG: "true"
+      DJANGO_SECRET_KEY: local-development-only-not-for-deployment
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
+      CSRF_TRUSTED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      TIME_ZONE: UTC
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+
+  frontend:
+    image: node:24-alpine
+    working_dir: /app
+    command: ["sh", "-c", "npm ci && npm run dev -- --host 0.0.0.0"]
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:8000
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:5173"
+
+volumes:
+  postgres_data:
+  frontend_node_modules:

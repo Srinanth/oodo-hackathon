@@ -57,6 +57,7 @@ backend/    Django project, API, domain apps, models, and migrations
 frontend/   React + TypeScript client and feature modules
 db/         Reviewed PostgreSQL schema and ER diagram
 docs/       PRD, API contract, architecture, ADRs, tracker, cost plan, and demo guide
+compose.yaml Starts local PostgreSQL, Django, and Vite development services
 Dockerfile  Builds the frontend and Django runtime image
 render.yaml Render web-service configuration; database provisioning is separate
 ```
@@ -67,55 +68,42 @@ Django models and migrations in `backend/` are the executable schema source of t
 
 ### Prerequisites
 
-- Python 3.13 and PostgreSQL 18.
-- Node.js 24 and npm.
-- Docker Desktop with the WSL 2 backend if running PostgreSQL in a local container. Docker Desktop's per-user installation is suitable for local development; WSL 2 must be enabled and available.
+- Docker Desktop with Docker Compose and its WSL 2 backend enabled.
+- For host-based development, Python 3.13, Node.js 24/npm, and PostgreSQL 18.
 
-### Backend
+### Start the full stack with Docker Compose
 
-1. Start PostgreSQL and create a local database and role. The expected defaults are in [`backend/.env.example`](backend/.env.example).
-2. In PowerShell, create the virtual environment, configure the database, and apply migrations:
+From the repository root:
 
-   ```powershell
-   cd backend
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   python -m pip install -r requirements.txt
-   if (!(Test-Path .env)) { Copy-Item .env.example .env }
-   # Set a local secret and PostgreSQL credentials in .env.
-   python manage.py migrate
-   python manage.py runserver 127.0.0.1:8000
-   ```
-
-### Frontend
-
-In another terminal:
-
-```powershell
-cd frontend
-npm ci
-npm run dev
+```sh
+docker compose up --build -d
+docker compose exec backend python manage.py seed_demo
 ```
 
-Open the Vite URL shown in the terminal. The dev server proxies `/api` and `/healthz` to Django.
+The first command starts PostgreSQL, Django, and Vite; Django applies migrations before serving requests. The seed command prompts for a demo-only password. Open [http://localhost:5173](http://localhost:5173) and use the accounts listed in [`docs/DEMO.md`](docs/DEMO.md). The Compose database, password, and Django key are local test settings only.
 
-### Seed the selection-round demo
+To view service logs or stop the stack:
 
-With the backend database ready, run `python manage.py seed_demo` from `backend/`. Choose a demo-only password when prompted, then follow [`docs/DEMO.md`](docs/DEMO.md) to exercise the staff and customer flows. The command creates synthetic data and is safe to rerun; use it only with a local or dedicated demo database.
+```sh
+docker compose logs -f backend frontend
+docker compose down
+```
+
+`docker compose down` keeps the local database volume. Use `docker compose down --volumes` only when you want to delete and recreate this Compose-managed test database. For host-based development, see [`backend/README.md`](backend/README.md).
 
 ## Verification
 
-Run backend tests from `backend/`:
+Run the backend test suite in the Compose environment:
 
-```powershell
-python manage.py test
+```sh
+docker compose exec backend python manage.py test
 ```
 
-Run frontend type-check/build and lint from `frontend/`:
+Run frontend type-check/build and lint in its container:
 
-```powershell
-npm run build
-npm run lint
+```sh
+docker compose exec frontend npm run build
+docker compose exec frontend npm run lint
 ```
 
 ## Deployment and cost

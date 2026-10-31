@@ -4,9 +4,29 @@ This walkthrough uses synthetic records only. Run it against a local database or
 
 ## Prepare the demo data
 
-1. Start PostgreSQL and apply migrations using the steps in [`backend/README.md`](../backend/README.md).
-2. From `backend/`, run `python manage.py seed_demo` and enter a demo-only password of at least nine characters with uppercase, lowercase, and a special character. The command is repeatable and does not reset existing passwords.
-3. Start the backend and frontend, then open `/login`.
+From the repository root, start the three-service development stack:
+
+```sh
+docker compose up --build -d
+```
+
+Compose starts PostgreSQL 18, Django, and Vite. The backend waits for the database and applies migrations before it starts accepting requests. The frontend is available at `http://localhost:5173`.
+
+Seed the synthetic accounts and catalog:
+
+```sh
+docker compose exec backend python manage.py seed_demo
+```
+
+The command prompts for a demo-only password of at least nine characters with uppercase, lowercase, and a special character. It is repeatable and does not reset existing passwords. A non-interactive agent can set `DEMO_SEED_PASSWORD` in its process environment and pass it through (PowerShell example):
+
+```powershell
+docker compose exec -T -e "DEMO_SEED_PASSWORD=$env:DEMO_SEED_PASSWORD" backend python manage.py seed_demo
+```
+
+Do not put the password in the repository or logs.
+
+Use `docker compose logs -f backend frontend` to inspect startup and request logs. Stop the services with `docker compose down`; this preserves the local database volume. `docker compose down --volumes` deletes that Compose-managed database and all demo records.
 
 The command creates these synthetic users:
 

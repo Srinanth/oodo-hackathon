@@ -4,17 +4,22 @@ This folder is the Django 5.2 LTS + Django REST Framework application. Keep Djan
 
 ## Run locally
 
-1. Create a virtual environment (`python -m venv .venv`) and create `.env` from `.env.example`; replace the development secret.
-2. Install Python dependencies with `.venv/Scripts/python -m pip install -r requirements.txt` on Windows or `.venv/bin/python -m pip install -r requirements.txt` on macOS/Linux.
-3. Start PostgreSQL 18 with `docker compose up -d db` (run in this folder).
-4. Run migrations with `.venv/Scripts/python manage.py migrate` (Windows) or `.venv/bin/python manage.py migrate` (macOS/Linux).
-5. Start Django with the same Python executable and `manage.py runserver 127.0.0.1:8000`.
+### Recommended: run the full stack in Docker Compose
 
-The frontend development server runs separately from `../frontend/` and proxies `/api` and `/healthz` to Django. The Vite scaffold is configured for Node 24.
+From the repository root, run `docker compose up --build -d`. This starts PostgreSQL 18, Django, and the Vite development server; Django applies migrations when it starts. The frontend proxies API and health requests to the backend service. The app is at `http://localhost:5173`.
 
-For the synthetic selection-round dataset and walkthrough, see [`../docs/DEMO.md`](../docs/DEMO.md). Run `python manage.py seed_demo` only against a local or dedicated demo database.
+To seed synthetic test accounts and catalog data, run `docker compose exec backend python manage.py seed_demo`, then follow [`../docs/DEMO.md`](../docs/DEMO.md). This Compose stack uses local-only credentials and must not be used with production data.
 
-For the same-origin production layout, `npm run build` writes the React entry point and assets into `backend/static/frontend/`; `python manage.py collectstatic --noinput` then collects them for WhiteNoise. The generated frontend build is ignored by Git and should be recreated during deployment.
+### Run Django on the host
+
+1. Start PostgreSQL 18 locally or start just the Compose database from the repository root with `docker compose up -d db`.
+2. Create a virtual environment (`python -m venv .venv`), create `.env` from `.env.example` if needed, and set the PostgreSQL host/port and local-only credentials. When using the Compose database, use `127.0.0.1:55432`.
+3. Install Python dependencies with `.venv/Scripts/python -m pip install -r requirements.txt` on Windows or `.venv/bin/python -m pip install -r requirements.txt` on macOS/Linux.
+4. Run migrations and start Django with the virtual-environment Python executable.
+
+Run the Vite client from `frontend/` with Node 24/npm and `npm run dev`; it proxies `/api` and `/healthz` to `http://127.0.0.1:8000`. For the same-origin production layout, `npm run build` writes the React entry point and assets into `backend/static/frontend/`; `python manage.py collectstatic --noinput` collects them for WhiteNoise.
+
+The generated frontend build is ignored by Git and should be recreated during deployment.
 
 ## Suggested app boundaries
 
