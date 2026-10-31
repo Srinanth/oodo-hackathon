@@ -122,7 +122,7 @@ npm run lint
 
 The root [`Dockerfile`](Dockerfile) builds the Vite app and packages it with Django, Gunicorn, and WhiteNoise. [`render.yaml`](render.yaml) configures the web service, health check, and pre-deploy migration command. It expects a separately provisioned PostgreSQL database and deployment environment values such as `DATABASE_URL`, `DJANGO_ALLOWED_HOSTS`, and `CSRF_TRUSTED_ORIGINS`; it does not provision the database or deploy the application by itself.
 
-The current persistent-demo estimate is approximately **$13 USD per month** for a small Render web service and PostgreSQL database, before tax and usage beyond included allowances. Review [`docs/PLAN.md`](docs/PLAN.md) for assumptions, alternatives, operational guardrails, and current pricing sources before provisioning paid services.
+The current persistent-demo estimate is approximately **$13 USD per month** for a small Render web service and PostgreSQL database. As a scale-planning indicator, the cost plan models base infrastructure at about **$0.130 per active subscription/month** for 100 subscriptions, **$0.0452** at 1,000, and **$0.01457** at 10,000 under the stated service, database, and storage assumptions. These are infrastructure estimates, not customer prices or capacity guarantees; bandwidth overages and variable costs are excluded. See [`docs/PLAN.md`](docs/PLAN.md) for the formula, tier assumptions, scale-up checks, and current pricing sources.
 
 ## Team and workflow
 

@@ -23,6 +23,28 @@ Render's Hobby workspace is listed at $0/month; service compute is billed separa
 
 The totals above are estimates for continuously running instances, before taxes, bandwidth/storage growth, transactional email, and optional domain registration. Confirm the selected region and final plan in the provider dashboard before provisioning.
 
+## Scalability cost metric
+
+Use **monthly infrastructure cost per active subscription** as a planning metric:
+
+```text
+monthly infrastructure cost per active subscription
+  = modeled monthly platform infrastructure spend
+    / average number of subscriptions in active status during that month
+```
+
+Paused and closed subscriptions are excluded from the denominator. This is an infrastructure unit-cost indicator for the team; it is not a customer price or a full accounting cost. It excludes support, engineering, taxes, email, payment processing, domain fees, and usage over included bandwidth. Render charges workspace, compute, storage, and metered usage separately. [Render pricing](https://render.com/pricing)
+
+| Scale scenario | Average active subscriptions | Illustrative monthly infrastructure | Cost per active subscription / month |
+|---|---:|---|---:|
+| Selection demo | 100 | $7 web (`0.5c-512mb`) + $6 Postgres (`0.1c-256mb`); 1 GB DB storage included = **$13** | **$0.1300** |
+| Pilot | 1,000 | $25 web (`1c-2g`) + $19 Postgres (`0.5c-1g`) + 4 GB extra DB storage × $0.30 = **$45.20** | **$0.0452** |
+| Growth | 10,000 | Pro workspace $25 + 2 × $25 web (`1c-2g`) + $55 Postgres (`1c-4g`) + 49 GB extra DB storage × $0.30 + $1 scheduled-job minimum = **$145.70** | **$0.01457** |
+
+These scenarios are planning examples, not capacity guarantees. The growth example assumes a Pro workspace for autoscaling, two web instances, 50 GB total database storage, and one small scheduled billing job; actual cron charges depend on run time. Render currently includes 5 GB monthly bandwidth on Hobby and 25 GB on Pro, then charges $0.15/GB; overages are not included above. Paid compute plans are billed per instance, so a second web instance adds another plan charge. [Compute plan specs](https://render.com/docs/compute-plans), [Postgres storage](https://render.com/docs/postgresql-creating-connecting), [Cron job billing](https://render.com/docs/cronjobs)
+
+Active subscription count alone does not determine required capacity. Request rate, concurrency, billing batch size, invoice history, and report query cost all matter. Treat each row as an initial budget envelope, then measure p95 response time, report latency, database CPU/memory/connections, storage growth, and billing duration in a representative workload before changing tiers. Keep the PRD report target of under two seconds at thousands of subscriptions as a performance gate.
+
 ## Included in the MVP; defer until required
 
 | Service or capability | MVP decision | Cost treatment |
