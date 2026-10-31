@@ -420,7 +420,12 @@ def advance_subscription_date(subscription_id: uuid.UUID, new_date: date) -> Non
         if sub:
             sub.next_billing_at = new_date
             sub.next_period_start = new_date
-            sub.save(update_fields=["next_billing_at", "next_period_start", "updated_at"])
+            update_fields = ["next_billing_at", "next_period_start", "updated_at"]
+            if sub.close_at_period_end and sub.expiry_date and new_date > sub.expiry_date:
+                sub.status = "closed"
+                sub.closed_at = timezone.now()
+                update_fields.extend(["status", "closed_at"])
+            sub.save(update_fields=update_fields)
             return
     except (LookupError, ValueError, Exception):
         pass
@@ -435,10 +440,14 @@ def advance_subscription_date(subscription_id: uuid.UUID, new_date: date) -> Non
                 cursor.execute(
                     """
                     UPDATE subscription
-                    SET next_billing_at = %s, next_period_start = %s, updated_at = now()
+                    SET next_billing_at = %s,
+                        next_period_start = %s,
+                        status = CASE WHEN close_at_period_end AND expiry_date IS NOT NULL AND expiry_date < %s THEN 'closed' ELSE status END,
+                        closed_at = CASE WHEN close_at_period_end AND expiry_date IS NOT NULL AND expiry_date < %s THEN now() ELSE closed_at END,
+                        updated_at = now()
                     WHERE id = %s
                     """,
-                    [new_date, new_date, subscription_id],
+                    [new_date, new_date, new_date, new_date, subscription_id],
                 )
     except Exception:
         pass
@@ -455,6 +464,7 @@ def _skip_expired_subscription(sub: SubscriptionData, business_date: date) -> bo
     return False
 
 
+@transaction.atomic
 def execute_billing_run(
     business_date: Any,
     triggered_by: Optional[Any] = None,
