@@ -11,6 +11,8 @@ from rest_framework.views import APIView, exception_handler
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 
 from apps.accounts.models import User
+from apps.customers.models import Customer
+from apps.customers.permissions import IsCustomerAccount
 from apps.catalog.discount_services import consume_discount_use, release_discount_use
 from .models import BillingRun, Invoice, InvoiceLine, InvoiceLineTax, InvoiceDiscountLine, Payment
 from .permissions import IsBillingStaff
@@ -120,9 +122,10 @@ class InvoiceViewSet(BillingApiErrorMixin, ModelViewSet):
 
         # Scoping: if customer, scope strictly to customer's records
         if hasattr(user, "role") and user.role == User.Role.CUSTOMER:
-            if not user.customer_id:
+            customer_id = Customer.objects.filter(account_user=user).values_list("id", flat=True).first()
+            if not customer_id:
                 return qs.none()
-            qs = qs.filter(customer_id=user.customer_id)
+            qs = qs.filter(customer_id=customer_id)
 
         # Query parameter filters
         params = self.request.query_params
@@ -268,7 +271,7 @@ class CustomerPortalInvoiceViewSet(BillingApiErrorMixin, ReadOnlyModelViewSet):
     Dedicated endpoint for Customer Portal: GET /portal/invoices and GET /portal/invoices/{id}
     Scoped strictly to the authenticated customer.
     """
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, IsCustomerAccount)
 
     def get_serializer_class(self):
         if self.action == "retrieve":
@@ -277,10 +280,11 @@ class CustomerPortalInvoiceViewSet(BillingApiErrorMixin, ReadOnlyModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if not hasattr(user, "customer_id") or not user.customer_id:
+        customer_id = Customer.objects.filter(account_user=user).values_list("id", flat=True).first()
+        if not customer_id:
             return Invoice.objects.none()
         return (
-            Invoice.objects.filter(customer_id=user.customer_id)
+            Invoice.objects.filter(customer_id=customer_id)
             .prefetch_related("lines__taxes", "discount_lines", "payments")
             .order_by("-issue_date", "-created_at")
         )

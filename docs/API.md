@@ -219,4 +219,4 @@ Response includes summary counts and totals for active subscriptions, payments c
 
 ## Status and contract ownership
 
-This API is a draft for implementation. Owners update this document when contracts change: Srinanth (identity/catalog/configuration), Angelo (customers/quotes/subscriptions/portal), Deepak (billing/invoices/payments/reports). Shared contract changes are coordinated before implementation and recorded in an ADR when they change an architecture decision.
+This API contract describes the implemented MVP endpoints. Srinanth owns identity, catalog, customers, quotes, subscriptions, and portal contracts; Deepak owns billing, invoices, payments, and reports. Shared contract changes are coordinated before implementation and recorded in an ADR when they change an architecture decision.
