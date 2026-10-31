@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import AuthPage, { type AuthMode } from './features/auth/AuthPage'
+import StaffPage from './features/staff/StaffPage'
 import {
   getCurrentUser,
   prepareCsrf,
@@ -102,6 +103,9 @@ function App() {
   }
 
   if (user) {
+    if (path.replace(/\/+$/, '') === '/staff' && user.role === 'admin') {
+      return <StaffPage onBack={() => navigate('/app')} />
+    }
     return (
       <main className="min-h-dvh bg-[#f5f6fa] px-4 py-7 sm:px-8 sm:py-10">
         <section className="mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-10">
@@ -125,7 +129,18 @@ function App() {
           </header>
 
           <div className="py-10">
-            <p className="text-sm font-medium text-indigo-700">Signed in as {user.role}</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-medium text-indigo-700">Signed in as {user.role}</p>
+              {user.role === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/staff')}
+                  className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-100"
+                >
+                  Manage staff
+                </button>
+              )}
+            </div>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
               Welcome, {user.name}
             </h1>

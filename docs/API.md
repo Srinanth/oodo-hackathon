@@ -26,7 +26,10 @@ Implement API handlers and domain services under `backend/`; implement views and
 | `GET /auth/me` | Signed in | Return current user, role, and linked customer ID if applicable |
 | `POST /auth/password-reset-requests` | Public | Send reset link to registered email without revealing whether it exists |
 | `POST /auth/password-resets` | Public with valid token | Set a new password; token is single-use and expires |
+| `GET /staff` | Admin | List staff accounts |
 | `POST /staff` | Admin | Create a staff account |
+
+Staff creation accepts `{"email":"staff@example.com","name":"Staff Name","password":"..."}`. The server assigns the `staff` role and records the creating administrator; callers cannot choose a role or Django admin privileges. The response contains `id`, `email`, `name`, `role`, `isActive`, and `createdAt`. Staff listing accepts `limit` (default 25, maximum 100), an opaque `cursor`, and optional `search` by name/email; it returns `{"items":[...],"nextCursor":"...","total":0,"activeCount":0,"inactiveCount":0}` and excludes administrator and customer accounts. Both methods require a signed-in administrator; authenticated staff and customers receive `403`. Customer portal detail views should use `IsCustomerOwner`, and customer portal lists should scope querysets with `customer_scoped` so ownership comes from the current session.
 
 Before the browser sends an unsafe request, call `GET /auth/csrf` to obtain the CSRF cookie. Subsequent `POST`, `PATCH`, and `DELETE` requests send its value in `X-CSRFToken`. Registration and login establish a Django session and return `{"user":{...}}`; logout returns `204`. Password-reset request always returns the same `202` message whether or not the email is registered. Reset emails link to `/password-reset/{uid}/{token}/`; the local email backend writes them to the Django console, and production must configure an email provider.
 

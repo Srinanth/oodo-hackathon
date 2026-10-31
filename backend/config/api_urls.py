@@ -7,6 +7,7 @@ urlpatterns = [
     path("auth/login", account_views.login_view, name="auth-login"),
     path("auth/logout", account_views.logout_view, name="auth-logout"),
     path("auth/me", account_views.me, name="auth-me"),
+    path("staff", account_views.staff_accounts, name="staff-accounts"),
     path(
         "auth/password-reset-requests",
         account_views.password_reset_request,

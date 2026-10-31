@@ -6,6 +6,8 @@ from django.contrib.auth.forms import PasswordResetForm
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import JsonResponse
+from django.db.models import Count, Q, Value
+from django.db.models.functions import Concat
 from django.utils.encoding import force_bytes, force_str
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from rest_framework import status
@@ -14,11 +16,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from apps.accounts.api_errors import api_error_payload
+from apps.accounts.permissions import IsAdministrator
 from apps.accounts.serializers import (
     LoginSerializer,
     PasswordResetRequestSerializer,
     PasswordResetSerializer,
     RegistrationSerializer,
+    StaffAccountSerializer,
 )
 
 User = get_user_model()
@@ -139,3 +143,54 @@ def password_reset(request):
     user.set_password(serializer.validated_data["newPassword"])
     user.save(update_fields=["password", "updated_at"])
     return Response({"message": "Password updated."})
+
+
+@csrf_protect
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated, IsAdministrator])
+def staff_accounts(request):
+    if request.method == "GET":
+        try:
+            limit = int(request.query_params.get("limit", "25"))
+        except ValueError as exc:
+            raise serializers.ValidationError({"limit": "Use an integer from 1 to 100."}) from exc
+        if limit < 1 or limit > 100:
+            raise serializers.ValidationError({"limit": "Use an integer from 1 to 100."})
+        cursor_value = request.query_params.get("cursor")
+        if cursor_value:
+            try:
+                cursor = int(cursor_value)
+                if cursor < 1:
+                    raise ValueError
+            except ValueError as exc:
+                raise serializers.ValidationError({"cursor": "This cursor is invalid."}) from exc
+        else:
+            cursor = None
+        all_staff = User.objects.filter(role=User.Role.STAFF)
+        stats = all_staff.aggregate(
+            total=Count("pk"),
+            activeCount=Count("pk", filter=Q(is_active=True)),
+            inactiveCount=Count("pk", filter=Q(is_active=False)),
+        )
+        accounts = all_staff.order_by("pk")
+        search = request.query_params.get("search", "").strip()
+        if search:
+            accounts = accounts.annotate(full_name=Concat("first_name", Value(" "), "last_name")).filter(
+                Q(email__icontains=search) | Q(full_name__icontains=search)
+            )
+        if cursor is not None:
+            accounts = accounts.filter(pk__gt=cursor)
+        page = list(accounts[: limit + 1])
+        has_more = len(page) > limit
+        page = page[:limit]
+        serializer = StaffAccountSerializer(page, many=True)
+        return Response({
+            "items": serializer.data,
+            "nextCursor": str(page[-1].pk) if has_more and page else None,
+            **stats,
+        })
+
+    serializer = StaffAccountSerializer(data=request.data, context={"request": request})
+    serializer.is_valid(raise_exception=True)
+    account = serializer.save()
+    return Response(StaffAccountSerializer(account).data, status=status.HTTP_201_CREATED)
