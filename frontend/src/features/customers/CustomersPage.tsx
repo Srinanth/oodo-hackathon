@@ -52,7 +52,7 @@ function errorMessage(error: unknown) {
   return 'Something went wrong. Please try again.'
 }
 
-function CustomersPage() {
+function CustomersPage({ onBack }: { onBack: () => void }) {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch] = useState('')
   const [cursor, setCursor] = useState<string | null>(null)
@@ -147,6 +147,7 @@ function CustomersPage() {
       <div className="mx-auto max-w-[1440px] px-5 py-8 sm:px-8 lg:px-10">
         <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
+            <button type="button" onClick={onBack} className="mb-4 text-sm font-semibold text-indigo-700 hover:text-indigo-900">← Workspace</button>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">
               Brightloop · Operations
             </p>

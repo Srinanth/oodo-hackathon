@@ -29,13 +29,13 @@ User = get_user_model()
 
 
 def _user_payload(user):
+    customer = getattr(user, "customer_record", None) if user.role == User.Role.CUSTOMER else None
     return {
         "id": str(user.pk),
         "email": user.email,
         "name": user.get_full_name().strip() or user.email,
         "role": user.role,
-        # Customer association is supplied when the customer domain model lands.
-        "customerId": None,
+        "customerId": str(customer.pk) if customer else None,
     }
 
 
