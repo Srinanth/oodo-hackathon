@@ -159,7 +159,7 @@ class QuoteSerializer(serializers.ModelSerializer):
     createdById = serializers.IntegerField(source="created_by_id", read_only=True, allow_null=True)
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
-    lines = serializers.ListField(child=serializers.DictField(), required=False)
+    lines = serializers.SerializerMethodField()
     subscriptionId = serializers.UUIDField(source="subscription.id", read_only=True, allow_null=True)
 
     class Meta:
@@ -175,10 +175,9 @@ class QuoteSerializer(serializers.ModelSerializer):
             validated["lines"] = line_serializer.validated_data
         return validated
 
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        data["lines"] = QuoteLineReadSerializer(instance.lines.select_related("plan", "product", "variant").prefetch_related("taxes"), many=True).data
-        return data
+    def get_lines(self, instance):
+        queryset = instance.lines.select_related("plan", "product", "variant").prefetch_related("taxes")
+        return QuoteLineReadSerializer(queryset, many=True).data
 
     def validate_currency(self, value):
         value = value.strip().upper()

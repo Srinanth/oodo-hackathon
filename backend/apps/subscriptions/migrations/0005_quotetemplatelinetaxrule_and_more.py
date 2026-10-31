@@ -5,6 +5,52 @@ import uuid
 from django.db import migrations, models
 
 
+def copy_template_tax_rules(apps, schema_editor):
+    QuoteTemplateLine = apps.get_model("subscriptions", "QuoteTemplateLine")
+    QuoteTemplateLineTaxRule = apps.get_model("subscriptions", "QuoteTemplateLineTaxRule")
+    old_relation = QuoteTemplateLine.tax_rules.through
+    database = schema_editor.connection.alias
+    relation_fields = [field for field in old_relation._meta.fields if field.many_to_one]
+    template_field, tax_field = relation_fields
+    links = old_relation.objects.using(database).values_list(
+        template_field.attname,
+        tax_field.attname,
+    )
+    QuoteTemplateLineTaxRule.objects.using(database).bulk_create(
+        [
+            QuoteTemplateLineTaxRule(
+                quote_template_line_id=template_id,
+                tax_rule_id=tax_id,
+            )
+            for template_id, tax_id in links.iterator()
+        ],
+        ignore_conflicts=True,
+    )
+
+
+def restore_template_tax_rules(apps, schema_editor):
+    QuoteTemplateLine = apps.get_model("subscriptions", "QuoteTemplateLine")
+    QuoteTemplateLineTaxRule = apps.get_model("subscriptions", "QuoteTemplateLineTaxRule")
+    old_relation = QuoteTemplateLine.tax_rules.through
+    database = schema_editor.connection.alias
+    relation_fields = [field for field in old_relation._meta.fields if field.many_to_one]
+    template_field, tax_field = relation_fields
+    links = QuoteTemplateLineTaxRule.objects.using(database).values_list(
+        "quote_template_line_id",
+        "tax_rule_id",
+    )
+    old_relation.objects.using(database).bulk_create(
+        [
+            old_relation(**{
+                template_field.attname: template_id,
+                tax_field.attname: tax_id,
+            })
+            for template_id, tax_id in links.iterator()
+        ],
+        ignore_conflicts=True,
+    )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -24,7 +70,12 @@ class Migration(migrations.Migration):
                 'db_table': 'quote_template_line_tax_rule',
             },
         ),
-        migrations.AlterField(
+        migrations.RunPython(copy_template_tax_rules, restore_template_tax_rules),
+        migrations.RemoveField(
+            model_name='quotetemplateline',
+            name='tax_rules',
+        ),
+        migrations.AddField(
             model_name='quotetemplateline',
             name='tax_rules',
             field=models.ManyToManyField(blank=True, related_name='quote_template_lines', through='subscriptions.QuoteTemplateLineTaxRule', to='catalog.taxrule'),

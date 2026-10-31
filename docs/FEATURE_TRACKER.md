@@ -27,6 +27,7 @@ Each feature owner delivers its backend work in `backend/` and user-facing work 
 | INV-01 | Invoice calculation and workflow | Deepak | Invoice/tax/discount snapshots, state/action APIs, print/email adapter | Invoice list/detail, confirm/cancel/send/print controls | BILL-01, TAX-01, DISC-01 | Snapshot is stable; totals correct; Draft/Confirmed/Paid and supported actions work | Done |
 | PAY-01 | Payment tracking and balances | Deepak | Payment model/API, balance and overdue calculation | Payment form/history and balance/status display | INV-01 | Method, amount, date, note save against invoice; balance and status recalculate | Done |
 | FIN-01 | Finance reporting | Deepak | Filtered aggregate endpoints and query/index work | Summary cards, filters, overdue queue, charts/tables | SUB-01, INV-01, PAY-01 | Shows active, collected, invoiced, outstanding, payments, overdue; common report stays under 2s at thousands of rows | Done |
+| DEMO-01 | Local selection demo package | Srinanth | Synthetic seed command, hosted database URL support, container and Render service definition | Shared responsive staff navigation and customer portal mobile section navigation | AUTH-01, QUOTE-01, SUB-01, BILL-01, PAY-01, FIN-01 | A repeatable synthetic setup supports the tested quote-to-report walkthrough; deployment artifacts and runbook are documented without claiming a hosted rehearsal | Done |
 
 ## Shared integration checkpoints
 
@@ -35,7 +36,7 @@ Each feature owner delivers its backend work in `backend/` and user-facing work 
 | INT-01: agree shared contracts | All | IDs, roles, state enums, money/currency format, date/timezone, and API response format are aligned with `docs/API.md` and `db/schema.sql` | Done |
 | INT-02: quote-to-subscription slice | Srinanth, Angelo | Configured product and plan flow through both UI folders, APIs, and models into one active subscription | Done |
 | INT-03: subscription-to-invoice slice | Angelo, Deepak | Active subscription reaches billing and produces one correct invoice, visible in staff UI and customer portal | Done |
-| INT-04: end-to-end demo | All | Seeded customer completes setup/quote/subscription/invoice/payment/report walkthrough in the deployed app | Not started |
+| INT-04: end-to-end demo | All | Synthetic seed command and walkthrough exist; hosted deployment is configured; complete the full path in the deployed app and record the result | In progress |
 
 ## Feature completion rule
 

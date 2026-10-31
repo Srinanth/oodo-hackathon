@@ -11,6 +11,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
+from apps.customers.models import Customer
 from apps.billing.models import (
     BillingRun,
     BillingRunItem,
@@ -455,7 +456,12 @@ class InvoiceWorkflowAndPaymentTests(APITestCase):
             password="custpassword123",
             role=User.Role.CUSTOMER,
         )
-        self.customer_user.customer_id = self.cust_id
+        Customer.objects.create(
+            id=self.cust_id,
+            account_user=self.customer_user,
+            contact_name="Demo Customer",
+            email=self.customer_user.email,
+        )
 
         self.invoice = Invoice.objects.create(
             number="INV-20261101-0001",
@@ -587,7 +593,6 @@ class InvoiceWorkflowAndPaymentTests(APITestCase):
             password="otherpassword123",
             role=User.Role.CUSTOMER,
         )
-        other_user.customer_id = uuid.uuid4()
         self.client.force_authenticate(user=other_user)
         res2 = self.client.get("/api/v1/portal/invoices")
         self.assertEqual(res2.status_code, status.HTTP_200_OK)

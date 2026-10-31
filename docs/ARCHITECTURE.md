@@ -67,10 +67,10 @@ The split assigns related features together and gives each person an end-to-end 
 
 **Deliverable:** A working application foundation and staff setup journey; the other domains can rely on shared auth, pricing, and access contracts.
 
-### Angelo - Customer, quotation, subscription lifecycle, and portal
+### Srinanth - Customer, quotation, subscription lifecycle, and portal (integration takeover)
 
 - **Backend (`backend/`):** Customer records/account association; quotation templates/quotes; quote pricing snapshot and conversion; subscription model, state transitions, renewal/pause/closure, next billing date; customer ownership-scoped APIs.
-- **Frontend (`frontend/`):** Customer management; quotation template and quote editor; quote-to-subscription screens; staff subscription list/detail/actions; customer portal for own subscriptions and invoices (invoice data supplied by Deepak).
+- **Frontend (`frontend/`):** Shared staff workspace navigation; customer management; quotation template and quote editor; quote-to-subscription screens; staff subscription list/actions; customer portal for own subscriptions and invoices (invoice data supplied by Deepak).
 - Integrates with Srinanth's catalog/auth APIs and Deepak's billing subscription contract.
 
 **Deliverable:** Staff can complete quote-to-active-subscription; customers can securely use their portal.
@@ -90,7 +90,7 @@ The split assigns related features together and gives each person an end-to-end 
 - All three agree on entity contracts and workflow states in section 4 before parallel implementation.
 - Each owner implements both UI and API/data logic for their feature and contributes a vertical slice to integration.
 - Srinanth reviews access-control integration; Angelo reviews subscription lifecycle integration; Deepak reviews invoice/payment calculation integration.
-- One shared demo seed dataset and one end-to-end walkthrough are maintained by the team together.
+- The repeatable synthetic dataset and selection-round walkthrough are in `backend/apps/accounts/management/commands/seed_demo.py` and `docs/DEMO.md`; the team owns the deployed rehearsal together.
 - No domain is only documentation or glue work; each owner has core business logic and a demo-visible feature area.
 
 ## 4. Domain model

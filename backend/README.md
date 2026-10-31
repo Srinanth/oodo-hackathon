@@ -12,6 +12,8 @@ This folder is the Django 5.2 LTS + Django REST Framework application. Keep Djan
 
 The frontend development server runs separately from `../frontend/` and proxies `/api` and `/healthz` to Django. The Vite scaffold is configured for Node 24.
 
+For the synthetic selection-round dataset and walkthrough, see [`../docs/DEMO.md`](../docs/DEMO.md). Run `python manage.py seed_demo` only against a local or dedicated demo database.
+
 For the same-origin production layout, `npm run build` writes the React entry point and assets into `backend/static/frontend/`; `python manage.py collectstatic --noinput` then collects them for WhiteNoise. The generated frontend build is ignored by Git and should be recreated during deployment.
 
 ## Suggested app boundaries
@@ -37,4 +39,4 @@ For the same-origin production layout, `npm run build` writes the React entry po
 - Put transactional workflows in domain services, not serializers or frontend code. Enforce the invoice-per-subscription-period uniqueness constraint in the database.
 - Keep the Django admin for internal setup/debugging; the user-facing product still uses the React client.
 
-Domain app packages, project settings, a health endpoint, and the initial custom user model are scaffolded. Product features remain tracked separately in the feature tracker.
+The core selection-round domains are implemented in their respective apps; see [`../docs/FEATURE_TRACKER.md`](../docs/FEATURE_TRACKER.md) for current status and [`../docs/DEMO.md`](../docs/DEMO.md) for the integrated walkthrough.

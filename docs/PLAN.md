@@ -39,12 +39,14 @@ The totals above are estimates for continuously running instances, before taxes,
 
 ## Deployment shape
 
-1. Build `frontend/` with `npm run build`; serve the output from the Django web service using WhiteNoise.
-2. Run one Django/Gunicorn web service with `/healthz/` as its health check and `/api/v1/` for the API.
-3. Run one managed PostgreSQL database in the same region. Use the provider's private connection string and store `DATABASE_URL`/credentials only in deployment secrets.
-4. Run migrations as a deploy/release step, not from every web worker at startup.
+1. Build the frontend and package it with Django/Gunicorn using the root `Dockerfile`.
+2. `render.yaml` describes a Singapore-region web service, checks `/healthz/`, and runs `python manage.py migrate --noinput` as a pre-deploy command.
+3. Provision one managed PostgreSQL database in the same region. Put its private connection URL in the service's `DATABASE_URL` secret; also set `DJANGO_ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` before exposing the app.
+4. Keep migrations in the host's deploy/release step, not in every web worker's startup command.
 5. Trigger billing manually during selection demos. If recurring automated runs become a product requirement, add a scheduled management-command job with a bounded timeout and idempotent run key.
 6. Configure HTTPS, secure session/CSRF cookies, allowed hosts, trusted origins, and a strong Django secret before exposing the app.
+
+The deployment blueprint is preparation only. It does not create a database or deploy the service. Provisioning and a hosted end-to-end rehearsal remain part of shared checkpoint `INT-04`.
 
 ## Spend controls and operational guardrails
 
