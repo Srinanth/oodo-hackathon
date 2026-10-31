@@ -17,3 +17,7 @@ class QuoteTemplateCursorPagination(CursorPagination):
         if next_link:
             next_cursor = parse_qs(urlparse(next_link).query).get(self.cursor_query_param, [None])[0]
         return Response({"items": data, "nextCursor": next_cursor})
+
+
+class QuoteCursorPagination(QuoteTemplateCursorPagination):
+    ordering = "-created_at"

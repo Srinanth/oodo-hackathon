@@ -2,9 +2,10 @@ import { useState } from 'react'
 
 import CustomersPage from './features/customers/CustomersPage'
 import QuoteTemplatesPage from './features/quotes/QuoteTemplatesPage'
+import QuotesPage from './features/quotes/QuotesPage'
 
 function App() {
-  const [section, setSection] = useState<'customers' | 'quoteTemplates'>('customers')
+  const [section, setSection] = useState<'customers' | 'quoteTemplates' | 'quotes'>('customers')
 
   return (
     <>
@@ -27,9 +28,17 @@ function App() {
           >
             Quote templates
           </button>
+          <button
+            type="button"
+            aria-pressed={section === 'quotes'}
+            onClick={() => setSection('quotes')}
+            className={`rounded-lg px-3 py-2 text-sm font-medium ${section === 'quotes' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            Quotes
+          </button>
         </div>
       </nav>
-      {section === 'customers' ? <CustomersPage /> : <QuoteTemplatesPage />}
+      {section === 'customers' ? <CustomersPage /> : section === 'quoteTemplates' ? <QuoteTemplatesPage /> : <QuotesPage />}
     </>
   )
 }
