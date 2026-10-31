@@ -1,3 +1,288 @@
-from django.test import TestCase
+from datetime import date, timedelta
+from decimal import Decimal
+import io
+import uuid
 
-# Create your tests here.
+from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.db import IntegrityError
+from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from apps.accounts.models import User
+from apps.billing.models import (
+    BillingRun,
+    BillingRunItem,
+    Invoice,
+    InvoiceLine,
+)
+from apps.billing.services import (
+    SubscriptionData,
+    SubscriptionLineData,
+    compute_due_date,
+    compute_period_bounds,
+    execute_billing_run,
+    generate_invoice_number,
+)
+
+
+class BillingModelTests(TestCase):
+    def setUp(self):
+        self.run = BillingRun.objects.create(
+            business_date=date(2026, 11, 1),
+            status=BillingRun.Status.RUNNING,
+        )
+        self.sub_id = uuid.uuid4()
+        self.cust_id = uuid.uuid4()
+
+    def test_invoice_creation_and_period_uniqueness(self):
+        invoice1 = Invoice.objects.create(
+            number="INV-20261101-0001",
+            customer_id=self.cust_id,
+            subscription_id=self.sub_id,
+            billing_run=self.run,
+            billing_period_start=date(2026, 11, 1),
+            billing_period_end=date(2026, 11, 30),
+            issue_date=date(2026, 11, 1),
+            due_date=date(2026, 12, 1),
+            customer_name_snapshot="Acme Corp",
+            customer_email_snapshot="acme@example.com",
+            subtotal=Decimal("100.00"),
+            total=Decimal("100.00"),
+        )
+        self.assertIsNotNone(invoice1.id)
+
+        # Attempt duplicate invoice for same (subscription_id, billing_period_start)
+        with self.assertRaises(IntegrityError):
+            Invoice.objects.create(
+                number="INV-20261101-0002",
+                customer_id=self.cust_id,
+                subscription_id=self.sub_id,
+                billing_run=self.run,
+                billing_period_start=date(2026, 11, 1),
+                billing_period_end=date(2026, 11, 30),
+                issue_date=date(2026, 11, 1),
+                due_date=date(2026, 12, 1),
+                customer_name_snapshot="Acme Corp",
+                customer_email_snapshot="acme@example.com",
+                subtotal=Decimal("100.00"),
+                total=Decimal("100.00"),
+            )
+
+    def test_invoice_line_and_totals(self):
+        invoice = Invoice.objects.create(
+            number="INV-20261101-0010",
+            customer_id=self.cust_id,
+            subscription_id=self.sub_id,
+            billing_run=self.run,
+            billing_period_start=date(2026, 11, 1),
+            billing_period_end=date(2026, 11, 30),
+            issue_date=date(2026, 11, 1),
+            due_date=date(2026, 12, 1),
+            customer_name_snapshot="Acme Corp",
+            customer_email_snapshot="acme@example.com",
+            subtotal=Decimal("250.00"),
+            total=Decimal("250.00"),
+        )
+        line = InvoiceLine.objects.create(
+            invoice=invoice,
+            line_number=1,
+            description="Pro Plan Monthly",
+            quantity=Decimal("2.000"),
+            unit_price=Decimal("125.00"),
+            subtotal=Decimal("250.00"),
+            total=Decimal("250.00"),
+        )
+        self.assertEqual(invoice.lines.count(), 1)
+        self.assertEqual(line.subtotal, Decimal("250.00"))
+
+
+class BillingServiceTests(TestCase):
+    def setUp(self):
+        self.sub_id = uuid.uuid4()
+        self.cust_id = uuid.uuid4()
+        self.business_date = date(2026, 11, 1)
+
+    def _sample_subscriptions(self):
+        return [
+            SubscriptionData(
+                id=self.sub_id,
+                number="SUB-001",
+                customer_id=self.cust_id,
+                plan_id=uuid.uuid4(),
+                status="active",
+                start_date=date(2026, 10, 1),
+                next_billing_at=date(2026, 11, 1),
+                next_period_start=date(2026, 11, 1),
+                payment_terms="Net 30",
+                currency="USD",
+                customer_name="TechStart Inc",
+                customer_email="billing@techstart.io",
+                lines=[
+                    SubscriptionLineData(
+                        line_number=1,
+                        description="Starter SaaS Tier",
+                        quantity=Decimal("1.000"),
+                        unit_price=Decimal("49.99"),
+                        currency="USD",
+                    )
+                ],
+            )
+        ]
+
+    def test_execute_billing_run_creates_invoice(self):
+        subs = self._sample_subscriptions()
+        run = execute_billing_run(
+            business_date=self.business_date,
+            subscriptions_override=subs,
+        )
+
+        self.assertEqual(run.status, BillingRun.Status.COMPLETED)
+        self.assertEqual(run.subscriptions_seen, 1)
+        self.assertEqual(run.invoices_created, 1)
+        self.assertEqual(run.failures, 0)
+
+        # Verify created invoice
+        invoice = Invoice.objects.get(subscription_id=self.sub_id)
+        self.assertEqual(invoice.billing_period_start, date(2026, 11, 1))
+        self.assertEqual(invoice.billing_period_end, date(2026, 11, 30))
+        self.assertEqual(invoice.total, Decimal("49.99"))
+        self.assertEqual(invoice.customer_name_snapshot, "TechStart Inc")
+
+        # Verify run item
+        item = run.items.get(subscription_id=self.sub_id)
+        self.assertEqual(item.status, BillingRunItem.Status.CREATED)
+        self.assertEqual(item.invoice, invoice)
+
+    def test_idempotent_retry_creates_no_duplicates(self):
+        subs = self._sample_subscriptions()
+
+        # First run: creates invoice
+        run1 = execute_billing_run(
+            business_date=self.business_date,
+            subscriptions_override=subs,
+        )
+        self.assertEqual(run1.invoices_created, 1)
+        self.assertEqual(Invoice.objects.filter(subscription_id=self.sub_id).count(), 1)
+
+        # Retry run for same date: exactly 0 new invoices
+        run2 = execute_billing_run(
+            business_date=self.business_date,
+            subscriptions_override=subs,
+        )
+        self.assertEqual(run2.status, BillingRun.Status.COMPLETED)
+        self.assertEqual(run2.invoices_created, 0)
+        self.assertEqual(run2.failures, 0)
+        self.assertEqual(Invoice.objects.filter(subscription_id=self.sub_id).count(), 1)
+
+        item2 = run2.items.get(subscription_id=self.sub_id)
+        self.assertEqual(item2.status, BillingRunItem.Status.ALREADY_EXISTS)
+        self.assertIsNotNone(item2.invoice)
+
+    def test_failure_isolation_and_visibility(self):
+        sub_good = self._sample_subscriptions()[0]
+        sub_bad = SubscriptionData(
+            id=uuid.uuid4(),
+            number="SUB-BAD",
+            customer_id=uuid.uuid4(),
+            plan_id=None,
+            status="active",
+            start_date=date(2026, 10, 1),
+            next_billing_at=date(2026, 11, 1),
+            lines=[
+                SubscriptionLineData(
+                    line_number=-1,  # Invalid line_number violates check constraint
+                    description="Bad Line",
+                    quantity=Decimal("1.000"),
+                    unit_price=Decimal("10.00"),
+                )
+            ],
+        )
+
+        run = execute_billing_run(
+            business_date=self.business_date,
+            subscriptions_override=[sub_good, sub_bad],
+        )
+
+        self.assertEqual(run.status, BillingRun.Status.COMPLETED_WITH_ERRORS)
+        self.assertEqual(run.subscriptions_seen, 2)
+        self.assertEqual(run.invoices_created, 1)
+        self.assertEqual(run.failures, 1)
+        self.assertTrue(run.items.filter(status=BillingRunItem.Status.FAILED).exists())
+        failed_item = run.items.get(status=BillingRunItem.Status.FAILED)
+        self.assertTrue(len(failed_item.error_message) > 0)
+
+
+class ManagementCommandTests(TestCase):
+    def test_run_billing_command(self):
+        out = io.StringIO()
+        call_command("run_billing", "--business-date=2026-11-01", stdout=out)
+        output = out.getvalue()
+        self.assertIn("Starting billing run", output)
+        self.assertIn("Status: completed", output)
+
+    def test_billing_run_alias_dry_run(self):
+        out = io.StringIO()
+        call_command("billing_run", "--dry-run", stdout=out)
+        output = out.getvalue()
+        self.assertIn("DRY RUN", output)
+
+
+class BillingApiTests(APITestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            email="admin@example.com",
+            password="adminpassword123",
+        )
+        self.customer_user = User.objects.create_user(
+            email="customer@example.com",
+            password="custpassword123",
+            role=User.Role.CUSTOMER,
+        )
+
+    def test_unauthenticated_denied(self):
+        response = self.client.post("/api/v1/billing-runs", {"businessDate": "2026-11-01"})
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.json()["error"]["code"], "AUTHENTICATION_REQUIRED")
+
+    def test_customer_role_forbidden(self):
+        self.client.force_authenticate(user=self.customer_user)
+        response = self.client.post("/api/v1/billing-runs", {"businessDate": "2026-11-01"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.json()["error"]["code"], "FORBIDDEN")
+
+    def test_staff_can_trigger_billing_run(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            "/api/v1/billing-runs",
+            {"businessDate": "2026-11-01"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        data = response.json()
+        self.assertEqual(data["businessDate"], "2026-11-01")
+        self.assertIn("status", data)
+        self.assertIn("subscriptionsSeen", data)
+        self.assertIn("invoicesCreated", data)
+        self.assertIn("failures", data)
+        self.assertIn("items", data)
+
+    def test_staff_can_list_and_retrieve_billing_runs(self):
+        self.client.force_authenticate(user=self.admin)
+        run = BillingRun.objects.create(
+            business_date=date(2026, 11, 1),
+            status=BillingRun.Status.COMPLETED,
+            subscriptions_seen=5,
+            invoices_created=5,
+        )
+
+        # List
+        list_resp = self.client.get("/api/v1/billing-runs")
+        self.assertEqual(list_resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(len(list_resp.json()) >= 1)
+
+        # Retrieve
+        detail_resp = self.client.get(f"/api/v1/billing-runs/{run.id}")
+        self.assertEqual(detail_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_resp.json()["id"], str(run.id))

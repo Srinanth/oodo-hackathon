@@ -71,7 +71,7 @@ ASGI_APPLICATION = "config.asgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
+        "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
         "NAME": os.getenv("DB_NAME", "subscription_db"),
         "USER": os.getenv("DB_USER", "subscription_app"),
         "PASSWORD": os.getenv("DB_PASSWORD", "local-dev-only"),
