@@ -118,11 +118,11 @@ function App() {
   if (user) {
     const workspacePath = path.replace(/\/+$/, '') || '/'
     if (user.role === 'customer' && ['/app', '/portal'].includes(workspacePath)) {
-      return <CustomerPortalPage onLogout={() => void handleLogout()} />
+      return <CustomerPortalPage logoutError={sessionMessage} onLogout={() => void handleLogout()} />
     }
     if (['admin', 'staff'].includes(user.role)) {
       const shell = (children: ReactNode) => (
-        <StaffWorkspaceShell pathname={workspacePath} role={user.role} name={user.name} onNavigate={navigate} onLogout={() => void handleLogout()}>
+        <StaffWorkspaceShell pathname={workspacePath} role={user.role} name={user.name} logoutError={sessionMessage} onNavigate={navigate} onLogout={() => void handleLogout()}>
           {children}
         </StaffWorkspaceShell>
       )

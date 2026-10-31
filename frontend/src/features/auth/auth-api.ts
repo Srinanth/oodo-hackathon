@@ -41,6 +41,7 @@ export async function registerCustomer(
 }
 
 export async function signOut(): Promise<void> {
+  await prepareCsrf()
   await apiFetch<void>('auth/logout', { method: 'POST' })
 }
 

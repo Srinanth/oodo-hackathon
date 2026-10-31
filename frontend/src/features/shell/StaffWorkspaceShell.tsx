@@ -4,6 +4,7 @@ type Props = {
   pathname: string
   role: string
   name: string
+  logoutError?: string
   onNavigate: (path: string) => void
   onLogout: () => void
   children: ReactNode
@@ -30,7 +31,7 @@ function isActive(pathname: string, path: string) {
   return pathname === path || pathname.startsWith(`${path}/`)
 }
 
-export function StaffWorkspaceShell({ pathname, role, name, onNavigate, onLogout, children }: Props) {
+export function StaffWorkspaceShell({ pathname, role, name, logoutError, onNavigate, onLogout, children }: Props) {
   const links = role === 'admin' ? [...operations, { path: '/staff', label: 'Team', icon: '♧' }] : operations
 
   const nav = (mobile = false) => (
@@ -86,6 +87,7 @@ export function StaffWorkspaceShell({ pathname, role, name, onNavigate, onLogout
           </div>
           <div className="overflow-x-auto border-t border-slate-100 lg:hidden">{nav(true)}</div>
         </header>
+        {logoutError && <p role="alert" className="mx-4 mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:mx-6">{logoutError}</p>}
         <main className="min-h-[calc(100dvh-4rem)]">{children}</main>
       </div>
     </div>

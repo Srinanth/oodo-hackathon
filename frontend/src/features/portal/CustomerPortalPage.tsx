@@ -12,7 +12,7 @@ function errorMessage(error: unknown) {
   return 'Could not load your account. Please try again.'
 }
 
-export function CustomerPortalPage({ onLogout }: { onLogout: () => void }) {
+export function CustomerPortalPage({ onLogout, logoutError }: { onLogout: () => void; logoutError?: string }) {
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -64,6 +64,7 @@ export function CustomerPortalPage({ onLogout }: { onLogout: () => void }) {
           <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#8ce2d2]">Brightloop · Customer portal</p><h1 className="mt-2 text-2xl font-semibold">{customer ? `Welcome, ${customer.contactName}` : 'Your account'}</h1><p className="mt-1 text-sm text-slate-300">Your subscriptions, invoices, and billing dates.</p></div>
           <button type="button" onClick={onLogout} className="rounded-lg border border-white/30 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10">Sign out</button>
         </header>
+        {logoutError && <p role="alert" className="mb-5 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{logoutError}</p>}
         {notice && <p role="status" className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
         {error && <div role="alert" className="mb-5 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"><p>{error}</p>{customer === null && <p className="mt-1 text-xs">Ask your account manager to link your portal login to your customer record.</p>}</div>}
         {loading ? <p role="status" className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">Loading your account…</p> : customer && <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
