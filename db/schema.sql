@@ -119,9 +119,10 @@ CREATE TABLE discount_rule (
 );
 
 CREATE TABLE discount_rule_product (
+    id UUID PRIMARY KEY,
     discount_rule_id UUID NOT NULL REFERENCES discount_rule(id) ON DELETE CASCADE,
     product_id UUID NOT NULL REFERENCES product(id) ON DELETE RESTRICT,
-    PRIMARY KEY (discount_rule_id, product_id)
+    UNIQUE (discount_rule_id, product_id)
 );
 
 CREATE TABLE quote_template (
@@ -330,13 +331,15 @@ CREATE TABLE invoice_discount_line (
 CREATE TABLE discount_redemption (
     id UUID PRIMARY KEY,
     discount_rule_id UUID NOT NULL REFERENCES discount_rule(id) ON DELETE RESTRICT,
-    invoice_id UUID NOT NULL REFERENCES invoice(id) ON DELETE RESTRICT,
+    -- The billing app adds the invoice FK when its Invoice model lands.
+    invoice_id UUID NOT NULL,
     status VARCHAR(12) NOT NULL CHECK (status IN ('reserved', 'consumed', 'released')),
     reserved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     consumed_at TIMESTAMPTZ NULL,
     UNIQUE (discount_rule_id, invoice_id)
 );
 CREATE INDEX discount_redemption_usage_idx ON discount_redemption(discount_rule_id, status);
+CREATE INDEX discount_red_invoice_idx ON discount_redemption(invoice_id);
 
 CREATE TABLE billing_run_item (
     id UUID PRIMARY KEY,

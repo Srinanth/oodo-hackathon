@@ -14,6 +14,7 @@ The brief requires recurring invoices to be generated without duplicates or miss
 - Create the invoice and advance the subscription's next billing date in one transaction, or use an equivalent recoverable claim protocol.
 - Persist billing-run outcomes and per-subscription failures so operators can retry safely.
 - Snapshot customer billing details, currency, quantities, unit prices, tax rates/amounts, and discounts on invoice records/lines.
+- Reserve a capped discount use with the invoice UUID during invoice generation, consume it when the invoice is confirmed, and release it only if the unconfirmed invoice is cancelled. Make the rule/invoice pair unique and serialize concurrent reservations by locking the discount rule row.
 - Represent money with fixed-precision decimals and an explicit currency.
 - Treat invoice totals as immutable after confirmation; corrections require a separate adjustment workflow if added later.
 
@@ -22,4 +23,4 @@ The brief requires recurring invoices to be generated without duplicates or miss
 - Retries and concurrent billing workers cannot create duplicate invoices for one period.
 - Issued invoices remain explainable after catalog and tax configuration changes.
 - The data model needs period keys, snapshots, and transactional state advancement.
-- The team must define when discount usage is consumed. The MVP recommendation is atomic consumption when an invoice is confirmed, with a reservation or concurrency rule to prevent the usage cap being exceeded.
+- `discount_redemption.invoice_id` is stored as a UUID until the billing app's `Invoice` model lands; that feature adds the database foreign key without changing the idempotency contract.
