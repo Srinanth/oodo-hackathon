@@ -15,7 +15,7 @@ Build a standalone **modular monolith** with:
 - **Backend:** Python 3.13, Django 5.2 LTS, Django REST Framework, and Psycopg 3.
 - **Frontend:** React with TypeScript, built by Vite and styled with Tailwind CSS.
 - **Database:** PostgreSQL 18, using the current supported minor release available from the chosen host.
-- **Local development:** Docker Compose for the Django service and PostgreSQL; Vite development server proxies API requests to Django.
+- **Local development:** Docker Compose for PostgreSQL, a Python virtual environment for Django, and Node/npm for Vite; Vite proxies API requests to Django.
 - **Demo deployment:** One Gunicorn/Django web service serves `/api/v1`, the React SPA entry point, and collected static assets through WhiteNoise; one small managed PostgreSQL database stores all durable state. Keep both on the same origin. Use one platform cron invocation for scheduled billing; billing remains manually triggerable for the demo.
 - **Authentication:** Django/DRF session authentication with secure, HTTP-only cookies and CSRF validation; server-side role and customer-ownership permissions.
 - **Financial operations:** PostgreSQL transactions, fixed-precision decimals, invoice snapshots, and a unique constraint on subscription plus billing-period start make billing retries safe.
