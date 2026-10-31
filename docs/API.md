@@ -86,6 +86,7 @@ Intervals: `daily`, `weekly`, `monthly`, `yearly`. End policy: `close_at_end` or
 |---|---|---|
 | `GET/POST /customers` | Staff | Search or create customer |
 | `GET/PATCH /customers/{customerId}` | Staff | Read or update customer |
+| `GET /portal/customer` | Customer | Read the customer linked to the authenticated account |
 | `GET/POST /quote-templates` | Staff read / Admin write | List or manage reusable templates |
 | `GET/POST /quotes` | Staff | List or create quotes |
 | `GET/PATCH /quotes/{quoteId}` | Staff | Read or update a draft quote |
@@ -95,6 +96,19 @@ Intervals: `daily`, `weekly`, `monthly`, `yearly`. End policy: `close_at_end` or
 | `GET /subscriptions/{subscriptionId}` | Staff or owning customer | Read subscription |
 | `POST /subscriptions/{subscriptionId}/actions` | Staff or owning customer, per action policy | Pause, renew, close early, or request supported action |
 | `GET /portal/subscriptions` | Customer | List only current customer's subscriptions |
+
+Customer list accepts `search`, `limit`, and `cursor` query parameters and returns `{"items": [...], "nextCursor": "..."}`. Search matches contact name, company name, email, and phone. Customer create/update uses camel-case fields (`companyName`, `contactName`, `email`, `phone`, `billingAddress`). Staff may set `accountUserEmail` to link an existing customer-role account, or `null` to clear the link; the database enforces one-to-one association. The portal customer endpoint ignores client-supplied customer IDs and resolves the linked record from the signed-in account.
+
+```json
+{
+  "companyName": "Example Co",
+  "contactName": "Avery Chen",
+  "email": "avery@example.com",
+  "phone": "+1 555 0100",
+  "billingAddress": "42 Main Street",
+  "accountUserEmail": "avery@example.com"
+}
+```
 
 Quote create example:
 
