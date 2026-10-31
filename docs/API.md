@@ -28,6 +28,8 @@ Implement API handlers and domain services under `backend/`; implement views and
 | `POST /auth/password-resets` | Public with valid token | Set a new password; token is single-use and expires |
 | `POST /staff` | Admin | Create a staff account |
 
+Before the browser sends an unsafe request, call `GET /auth/csrf` to obtain the CSRF cookie. Subsequent `POST`, `PATCH`, and `DELETE` requests send its value in `X-CSRFToken`. Registration and login establish a Django session and return `{"user":{...}}`; logout returns `204`. Password-reset request always returns the same `202` message whether or not the email is registered. Reset emails link to `/password-reset/{uid}/{token}/`; the local email backend writes them to the Django console, and production must configure an email provider.
+
 Registration request:
 
 ```json
@@ -35,6 +37,8 @@ Registration request:
 ```
 
 Enforce the brief's password policy (minimum 9 characters, uppercase, lowercase, special character), normalized unique email, and secure password hashing.
+
+Password-reset submission uses `{"uid":"...","token":"...","newPassword":"..."}`. Reset tokens use Django's expiring token generator and become invalid after the password changes.
 
 ## Catalog and configuration
 
