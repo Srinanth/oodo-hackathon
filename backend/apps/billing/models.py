@@ -336,3 +336,55 @@ class BillingRunItem(models.Model):
 
     def __str__(self):
         return f"RunItem {self.subscription_id} ({self.period_start}): {self.status}"
+
+
+class Payment(models.Model):
+    class Status(models.TextChoices):
+        POSTED = "posted", "Posted"
+        VOID = "void", "Void"
+        REFUNDED = "refunded", "Refunded"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    invoice = models.ForeignKey(
+        Invoice,
+        on_delete=models.RESTRICT,
+        related_name="payments",
+    )
+    method = models.CharField(max_length=40)
+    amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+    )
+    currency = models.CharField(max_length=3, default="USD")
+    status = models.CharField(
+        max_length=12,
+        choices=Status.choices,
+        default=Status.POSTED,
+    )
+    paid_at = models.DateTimeField()
+    note = models.TextField(blank=True, default="")
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="recorded_payments",
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "payment"
+        ordering = ("-paid_at", "-created_at")
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(amount__gt=0),
+                name="payment_amount_positive",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["invoice", "status"], name="payment_invoice_status_idx"),
+            models.Index(fields=["paid_at"], name="payment_date_idx"),
+        ]
+
+    def __str__(self):
+        return f"Payment {self.id}: {self.amount} {self.currency} for {self.invoice.number} ({self.status})"

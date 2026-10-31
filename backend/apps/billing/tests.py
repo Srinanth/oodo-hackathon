@@ -429,3 +429,179 @@ class BillingApiTests(APITestCase):
         detail_resp = self.client.get(f"/api/v1/billing-runs/{run.id}")
         self.assertEqual(detail_resp.status_code, status.HTTP_200_OK)
         self.assertEqual(detail_resp.json()["id"], str(run.id))
+
+
+class InvoiceWorkflowAndPaymentTests(APITestCase):
+    def setUp(self):
+        # Clean up all billing data from prior test classes in correct order
+        from apps.billing.models import Payment, InvoiceLineTax, InvoiceDiscountLine
+        Payment.objects.all().delete()
+        InvoiceLineTax.objects.all().delete()
+        InvoiceDiscountLine.objects.all().delete()
+        InvoiceLine.objects.all().delete()
+        BillingRunItem.objects.all().delete()
+        Invoice.objects.all().delete()
+        BillingRun.objects.all().delete()
+
+        self.admin = User.objects.create_superuser(
+            email="admin@example.com",
+            password="adminpassword123",
+            role=User.Role.ADMIN,
+        )
+        self.cust_id = uuid.uuid4()
+        self.sub_id = uuid.uuid4()
+        self.customer_user = User.objects.create_user(
+            email="cust@example.com",
+            password="custpassword123",
+            role=User.Role.CUSTOMER,
+        )
+        self.customer_user.customer_id = self.cust_id
+
+        self.invoice = Invoice.objects.create(
+            number="INV-20261101-0001",
+            customer_id=self.cust_id,
+            subscription_id=self.sub_id,
+            billing_period_start=date(2026, 11, 1),
+            billing_period_end=date(2026, 11, 30),
+            issue_date=date(2026, 11, 1),
+            due_date=date(2026, 11, 15),
+            customer_name_snapshot="Apex Corp",
+            customer_email_snapshot="cust@example.com",
+            billing_address_snapshot="123 Tech Way",
+            subtotal=Decimal("100.00"),
+            tax_total=Decimal("10.00"),
+            discount_total=Decimal("5.00"),
+            total=Decimal("105.00"),
+            status=Invoice.Status.DRAFT,
+        )
+        InvoiceLine.objects.create(
+            invoice=self.invoice,
+            line_number=1,
+            description="Cloud Platform Pro",
+            quantity=Decimal("1.000"),
+            unit_price=Decimal("100.00"),
+            subtotal=Decimal("100.00"),
+            tax_total=Decimal("10.00"),
+            discount_total=Decimal("5.00"),
+            total=Decimal("105.00"),
+        )
+
+    def test_invoice_list_and_detail(self):
+        self.client.force_authenticate(user=self.admin)
+        res = self.client.get("/api/v1/invoices")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        data = body.get("results", body)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["number"], "INV-20261101-0001")
+        self.assertEqual(data[0]["status"], "draft")
+        self.assertEqual(data[0]["total"], "105.00")
+        self.assertEqual(data[0]["paidAmount"], "0.00")
+        self.assertEqual(data[0]["balanceDue"], "105.00")
+
+        # Detail view
+        detail_res = self.client.get(f"/api/v1/invoices/{self.invoice.id}")
+        self.assertEqual(detail_res.status_code, status.HTTP_200_OK)
+        det = detail_res.json()
+        self.assertEqual(len(det["lines"]), 1)
+        self.assertEqual(det["billingAddressSnapshot"], "123 Tech Way")
+
+    def test_invoice_confirm_and_cancel_actions(self):
+        self.client.force_authenticate(user=self.admin)
+
+        # Confirm action
+        conf_res = self.client.post(
+            f"/api/v1/invoices/{self.invoice.id}/actions",
+            {"action": "confirm"},
+            format="json",
+        )
+        self.assertEqual(conf_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(conf_res.json()["status"], "confirmed")
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.status, Invoice.Status.CONFIRMED)
+        self.assertIsNotNone(self.invoice.confirmed_at)
+
+        # Cannot confirm an already confirmed invoice
+        conf_again = self.client.post(
+            f"/api/v1/invoices/{self.invoice.id}/actions",
+            {"action": "confirm"},
+            format="json",
+        )
+        self.assertEqual(conf_again.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Cancel action
+        cancel_res = self.client.post(
+            f"/api/v1/invoices/{self.invoice.id}/actions",
+            {"action": "cancel"},
+            format="json",
+        )
+        self.assertEqual(cancel_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(cancel_res.json()["status"], "cancelled")
+
+    def test_payment_recording_and_status_auto_advancement(self):
+        self.client.force_authenticate(user=self.admin)
+        self.invoice.status = Invoice.Status.CONFIRMED
+        self.invoice.save()
+
+        # Partial payment: 50.00 of 105.00
+        pay1 = self.client.post(
+            f"/api/v1/invoices/{self.invoice.id}/payments",
+            {"method": "credit_card", "amount": "50.00", "note": "Partial upfront"},
+            format="json",
+        )
+        self.assertEqual(pay1.status_code, status.HTTP_201_CREATED)
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.status, Invoice.Status.CONFIRMED)
+
+        # Check detail reflects remaining balance
+        det1 = self.client.get(f"/api/v1/invoices/{self.invoice.id}").json()
+        self.assertEqual(det1["paidAmount"], "50.00")
+        self.assertEqual(det1["balanceDue"], "55.00")
+
+        # Second payment: remaining 55.00
+        pay2 = self.client.post(
+            f"/api/v1/invoices/{self.invoice.id}/payments",
+            {"method": "bank_transfer", "amount": "55.00", "note": "Settlement"},
+            format="json",
+        )
+        self.assertEqual(pay2.status_code, status.HTTP_201_CREATED)
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.status, Invoice.Status.PAID)
+
+        # Check detail reflects fully paid
+        det2 = self.client.get(f"/api/v1/invoices/{self.invoice.id}").json()
+        self.assertEqual(det2["paidAmount"], "105.00")
+        self.assertEqual(det2["balanceDue"], "0.00")
+
+    def test_customer_portal_scoping(self):
+        # Customer sees their own invoice
+        self.client.force_authenticate(user=self.customer_user)
+        res = self.client.get("/api/v1/portal/invoices")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        results = res.json().get("results", res.json())
+        self.assertEqual(len(results), 1)
+
+        # Another customer sees none
+        other_user = User.objects.create_user(
+            email="other@example.com",
+            password="otherpassword123",
+            role=User.Role.CUSTOMER,
+        )
+        other_user.customer_id = uuid.uuid4()
+        self.client.force_authenticate(user=other_user)
+        res2 = self.client.get("/api/v1/portal/invoices")
+        self.assertEqual(res2.status_code, status.HTTP_200_OK)
+        results2 = res2.json().get("results", res2.json())
+        self.assertEqual(len(results2), 0)
+
+    def test_finance_reporting_aggregations(self):
+        self.client.force_authenticate(user=self.admin)
+        report_res = self.client.get("/api/v1/reports/finance")
+        self.assertEqual(report_res.status_code, status.HTTP_200_OK)
+        data = report_res.json()
+        self.assertIn("metrics", data)
+        self.assertIn("invoicedAmount", data["metrics"])
+        self.assertIn("collectedRevenue", data["metrics"])
+        self.assertIn("outstandingBalance", data["metrics"])
+        self.assertIn("overdueCount", data["metrics"])
+        self.assertIn("invoices", data)
