@@ -331,8 +331,7 @@ CREATE TABLE invoice_discount_line (
 CREATE TABLE discount_redemption (
     id UUID PRIMARY KEY,
     discount_rule_id UUID NOT NULL REFERENCES discount_rule(id) ON DELETE RESTRICT,
-    -- The billing app adds the invoice FK when its Invoice model lands.
-    invoice_id UUID NOT NULL,
+    invoice_id UUID NOT NULL REFERENCES invoice(id) ON DELETE RESTRICT,
     status VARCHAR(12) NOT NULL CHECK (status IN ('reserved', 'consumed', 'released')),
     reserved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     consumed_at TIMESTAMPTZ NULL,

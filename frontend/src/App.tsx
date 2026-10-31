@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import AuthPage, { type AuthMode } from './features/auth/AuthPage'
+import { BillingRunPage } from './features/billing/BillingRunPage'
 import CatalogPage from './features/catalog/CatalogPage'
 import DiscountsPage from './features/discounts/DiscountsPage'
+import { FinanceReportPage } from './features/finance/FinanceReportPage'
+import { InvoiceListPage } from './features/invoices/InvoiceListPage'
 import PlansPage from './features/plans/PlansPage'
 import StaffPage from './features/staff/StaffPage'
 import TaxPage from './features/tax/TaxPage'
@@ -107,6 +110,33 @@ function App() {
   }
 
   if (user) {
+    const workspacePath = path.replace(/\/+$/, '') || '/'
+    if (['/billing-runs', '/invoices', '/reports/finance'].includes(workspacePath) && ['admin', 'staff'].includes(user.role)) {
+      return (
+        <div className="min-h-dvh bg-slate-50/60">
+          <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-3 py-3 backdrop-blur sm:px-6">
+            <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+              <button type="button" onClick={() => navigate('/app')} className="flex items-center gap-2 font-semibold text-slate-900">
+                <span className="grid size-8 place-items-center rounded-lg bg-[#17243b] text-sm text-[#8ce2d2]">B</span>Brightloop
+              </button>
+              <nav aria-label="Billing workspace" className="flex flex-wrap gap-1">
+                {[
+                  ['/invoices', 'Invoices'],
+                  ['/billing-runs', 'Billing runs'],
+                  ['/reports/finance', 'Finance report'],
+                ].map(([href, label]) => (
+                  <button key={href} type="button" onClick={() => navigate(href)} aria-current={workspacePath === href ? 'page' : undefined} className={`rounded-lg px-3 py-2 text-sm font-semibold ${workspacePath === href ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}`}>
+                    {label}
+                  </button>
+                ))}
+              </nav>
+              <button type="button" onClick={() => navigate('/app')} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Workspace</button>
+            </div>
+          </header>
+          {workspacePath === '/billing-runs' ? <BillingRunPage /> : workspacePath === '/reports/finance' ? <FinanceReportPage /> : <InvoiceListPage />}
+        </div>
+      )
+    }
     if (path.replace(/\/+$/, '') === '/discount-rules' && ['admin', 'staff'].includes(user.role)) {
       return <DiscountsPage isAdmin={user.role === 'admin'} onBack={() => navigate('/app')} />
     }
@@ -147,6 +177,33 @@ function App() {
           <div className="py-10">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm font-medium text-indigo-700">Signed in as {user.role}</p>
+              {['admin', 'staff'].includes(user.role) && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/invoices')}
+                  className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-100"
+                >
+                  Invoices
+                </button>
+              )}
+              {['admin', 'staff'].includes(user.role) && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/billing-runs')}
+                  className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-100"
+                >
+                  Billing runs
+                </button>
+              )}
+              {['admin', 'staff'].includes(user.role) && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/reports/finance')}
+                  className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-100"
+                >
+                  Finance report
+                </button>
+              )}
               {['admin', 'staff'].includes(user.role) && (
                 <button
                   type="button"

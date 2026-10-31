@@ -23,4 +23,4 @@ The brief requires recurring invoices to be generated without duplicates or miss
 - Retries and concurrent billing workers cannot create duplicate invoices for one period.
 - Issued invoices remain explainable after catalog and tax configuration changes.
 - The data model needs period keys, snapshots, and transactional state advancement.
-- `discount_redemption.invoice_id` is stored as a UUID until the billing app's `Invoice` model lands; that feature adds the database foreign key without changing the idempotency contract.
+- Discount redemptions use a protected foreign key to the invoice, and snapshot rows retain nullable foreign keys to the source tax/discount rules so a deleted configuration can never rewrite an issued invoice.

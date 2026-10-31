@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 from apps.accounts import views as account_views
 from apps.catalog import views as catalog_views
 
@@ -31,4 +31,5 @@ urlpatterns = [
         account_views.password_reset,
         name="auth-password-reset",
     ),
+    path("", include("apps.billing.urls")),
 ]

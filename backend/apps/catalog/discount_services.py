@@ -88,7 +88,7 @@ def discount_snapshot(rule, amount, currency):
 
 
 @transaction.atomic
-def reserve_discount_use(rule_id, invoice_id):
+def reserve_discount_use(rule_id, invoice_id, *, as_of=None):
     """Reserve one capped use for an invoice, safely under concurrent callers.
 
     Keep this call in the invoice confirmation transaction. The unique
@@ -99,7 +99,7 @@ def reserve_discount_use(rule_id, invoice_id):
     redemption = DiscountRedemption.objects.filter(discount_rule=rule, invoice_id=invoice_id).first()
     if redemption and redemption.status != DiscountRedemption.Status.RELEASED:
         return redemption
-    now = timezone.now()
+    now = as_of or timezone.now()
     if not rule.is_active or (rule.starts_at and now < rule.starts_at) or (rule.ends_at and now > rule.ends_at):
         raise DiscountUnavailable("This discount is not active now.")
     active_count = _active_redemption_count(rule)

@@ -176,9 +176,12 @@ class DiscountRedemption(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     discount_rule = models.ForeignKey(DiscountRule, on_delete=models.PROTECT, related_name="redemptions", db_column="discount_rule_id")
-    # Invoice owns the related model in the billing feature; this UUID allows
-    # the discount reservation contract to land before that app's model exists.
-    invoice_id = models.UUIDField()
+    invoice = models.ForeignKey(
+        "billing.Invoice",
+        on_delete=models.PROTECT,
+        related_name="discount_redemptions",
+        db_column="invoice_id",
+    )
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.RESERVED)
     reserved_at = models.DateTimeField(auto_now_add=True)
     consumed_at = models.DateTimeField(null=True, blank=True)
