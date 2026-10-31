@@ -8,7 +8,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.accounts.permissions import IsAdministrator, IsStaffReadAdminWrite
-from apps.catalog.models import Product, ProductVariant
+from apps.catalog.models import Plan, Product, ProductVariant
+from apps.catalog.plan_serializers import PlanSerializer
 from apps.catalog.serializers import (
     ProductSerializer,
     ProductVariantCreateSerializer,
@@ -104,3 +105,44 @@ def product_variant_detail(request, product_id, variant_id):
     serializer.is_valid(raise_exception=True)
     updated_variant = serializer.save()
     return Response(VariantReadSerializer(updated_variant).data)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated, IsStaffReadAdminWrite])
+def plans(request):
+    if request.method == "GET":
+        limit, cursor = _page_params(request)
+        queryset = Plan.objects.order_by("id")
+        if cursor:
+            queryset = queryset.filter(id__gt=cursor)
+        search = request.query_params.get("search", "").strip()
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+        page = list(queryset[: limit + 1])
+        has_more = len(page) > limit
+        page = page[:limit]
+        return Response({
+            "items": PlanSerializer(page, many=True).data,
+            "nextCursor": str(page[-1].id) if has_more and page else None,
+        })
+
+    serializer = PlanSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    plan = serializer.save()
+    return Response(PlanSerializer(plan).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated, IsStaffReadAdminWrite])
+def plan_detail(request, plan_id):
+    try:
+        plan = Plan.objects.get(pk=plan_id)
+    except Plan.DoesNotExist as exc:
+        raise NotFound("Plan not found.") from exc
+
+    if request.method == "GET":
+        return Response(PlanSerializer(plan).data)
+
+    serializer = PlanSerializer(plan, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    return Response(PlanSerializer(serializer.save()).data)

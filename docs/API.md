@@ -51,8 +51,8 @@ Password-reset submission uses `{"uid":"...","token":"...","newPassword":"..."}`
 | `GET/PATCH /products/{productId}` | Staff read / Admin write | Read or update product |
 | `POST /products/{productId}/variants` | Admin | Add a variant with explicit configurable adjustment |
 | `PATCH /products/{productId}/variants/{variantId}` | Admin | Update or deactivate a variant |
-| `GET/POST /plans` | Staff read / Admin write | List or create plans |
-| `GET/PATCH /plans/{planId}` | Staff read / Admin write | Read or update plan |
+| `GET/POST /plans` | Staff read / Admin write | Search/list or create plans |
+| `GET/PATCH /plans/{planId}` | Staff read / Admin write | Read, update, or deactivate a plan |
 | `GET/POST /tax-rules` | Staff read / Admin write | List or create tax rules |
 | `GET/POST /discount-rules` | Staff read / Admin write | List or create discount rules |
 | `POST /pricing/preview` | Staff | Calculate quote/line price, tax, and discount preview |
@@ -74,10 +74,13 @@ Product listing accepts `limit` (default 25, maximum 100), opaque `cursor`, and 
 
 Plan example:
 
+Plan listing accepts `limit` (default 25, maximum 100), opaque `cursor`, and optional name `search`; it returns `items` and `nextCursor`. Create requires `name`, `interval`, `price`, `minimumQuantity`, and `endPolicy`; `intervalCount` defaults to 1, availability dates may be null, and pause/renewal/active policy fields use documented defaults. `availableUntil` must be on or after `availableFrom`. Currency is normalized to uppercase and immutable after creation. Admins can deactivate plans with `PATCH` and `isActive:false`; historical references are retained.
+
 ```json
 {
   "name":"Business Monthly",
   "interval":"monthly",
+  "intervalCount":1,
   "price":{"amount":"100.00","currency":"USD"},
   "minimumQuantity":1,
   "availableFrom":"2026-11-01",

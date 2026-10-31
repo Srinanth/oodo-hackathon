@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import AuthPage, { type AuthMode } from './features/auth/AuthPage'
 import CatalogPage from './features/catalog/CatalogPage'
+import PlansPage from './features/plans/PlansPage'
 import StaffPage from './features/staff/StaffPage'
 import {
   getCurrentUser,
@@ -104,6 +105,9 @@ function App() {
   }
 
   if (user) {
+    if (path.replace(/\/+$/, '') === '/plans' && ['admin', 'staff'].includes(user.role)) {
+      return <PlansPage isAdmin={user.role === 'admin'} onBack={() => navigate('/app')} />
+    }
     if (path.replace(/\/+$/, '') === '/products' && ['admin', 'staff'].includes(user.role)) {
       return <CatalogPage isAdmin={user.role === 'admin'} onBack={() => navigate('/app')} />
     }
@@ -142,6 +146,15 @@ function App() {
                   className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-100"
                 >
                   Product catalog
+                </button>
+              )}
+              {['admin', 'staff'].includes(user.role) && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/plans')}
+                  className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-100"
+                >
+                  Plans
                 </button>
               )}
               {user.role === 'admin' && (
