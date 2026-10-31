@@ -60,7 +60,7 @@ CREATE TABLE product (
 
 CREATE TABLE product_variant (
     id UUID PRIMARY KEY,
-    product_id UUID NOT NULL REFERENCES product(id) ON DELETE RESTRICT,
+    product_id UUID NULL REFERENCES product(id) ON DELETE RESTRICT,
     name VARCHAR(160) NOT NULL,
     price_adjustment NUMERIC(14,2) NOT NULL DEFAULT 0,
     currency CHAR(3) NOT NULL,
@@ -122,7 +122,7 @@ CREATE TABLE discount_rule (
 CREATE TABLE discount_rule_product (
     id UUID PRIMARY KEY,
     discount_rule_id UUID NOT NULL REFERENCES discount_rule(id) ON DELETE CASCADE,
-    product_id UUID NOT NULL REFERENCES product(id) ON DELETE RESTRICT,
+    product_id UUID NULL REFERENCES product(id) ON DELETE RESTRICT,
     UNIQUE (discount_rule_id, product_id)
 );
 
@@ -145,7 +145,14 @@ CREATE TABLE quote_template_line (
     plan_id UUID NULL REFERENCES plan(id) ON DELETE RESTRICT,
     description VARCHAR(500) NOT NULL,
     quantity NUMERIC(12,3) NOT NULL DEFAULT 1 CHECK (quantity > 0),
-    UNIQUE (template_id, line_number)
+    UNIQUE (template_id, line_number),
+    CHECK (plan_id IS NOT NULL OR product_id IS NOT NULL)
+);
+CREATE TABLE quote_template_line_tax_rule (
+    id UUID PRIMARY KEY,
+    quote_template_line_id UUID NOT NULL REFERENCES quote_template_line(id) ON DELETE CASCADE,
+    tax_rule_id UUID NOT NULL REFERENCES tax_rule(id) ON DELETE RESTRICT,
+    UNIQUE (quote_template_line_id, tax_rule_id)
 );
 
 CREATE TABLE quote (
@@ -174,9 +181,9 @@ CREATE TABLE quote_line (
     id UUID PRIMARY KEY,
     quote_id UUID NOT NULL REFERENCES quote(id) ON DELETE CASCADE,
     line_number INTEGER NOT NULL CHECK (line_number > 0),
-    product_id UUID NULL REFERENCES product(id) ON DELETE SET NULL,
-    variant_id UUID NULL REFERENCES product_variant(id) ON DELETE SET NULL,
-    plan_id UUID NULL REFERENCES plan(id) ON DELETE SET NULL,
+    product_id UUID NULL REFERENCES product(id) ON DELETE RESTRICT,
+    variant_id UUID NULL REFERENCES product_variant(id) ON DELETE RESTRICT,
+    plan_id UUID NULL REFERENCES plan(id) ON DELETE RESTRICT,
     description VARCHAR(500) NOT NULL,
     quantity NUMERIC(12,3) NOT NULL CHECK (quantity > 0),
     unit_price NUMERIC(14,2) NOT NULL CHECK (unit_price >= 0),
@@ -201,28 +208,31 @@ CREATE TABLE subscription (
     id UUID PRIMARY KEY,
     number VARCHAR(40) NOT NULL UNIQUE,
     customer_id UUID NOT NULL REFERENCES customer(id) ON DELETE RESTRICT,
-    quote_id UUID NULL UNIQUE REFERENCES quote(id) ON DELETE SET NULL,
-    plan_id UUID NOT NULL REFERENCES plan(id) ON DELETE RESTRICT,
+    quote_id UUID NULL UNIQUE REFERENCES quote(id) ON DELETE RESTRICT,
+    plan_id UUID NULL REFERENCES plan(id) ON DELETE RESTRICT,
     status VARCHAR(16) NOT NULL CHECK (status IN ('confirmed', 'active', 'paused', 'closed')),
     start_date DATE NOT NULL,
     expiry_date DATE NULL,
-    next_period_start DATE NULL,
-    next_billing_at DATE NULL,
+    next_period_start DATE NOT NULL,
+    next_billing_at DATE NOT NULL,
     payment_terms VARCHAR(200) NOT NULL DEFAULT '',
     currency CHAR(3) NOT NULL,
+    close_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,
+    closed_at TIMESTAMPTZ NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (expiry_date IS NULL OR expiry_date >= start_date)
 );
-CREATE INDEX subscription_due_idx ON subscription(status, next_billing_at);
-CREATE INDEX subscription_customer_status_idx ON subscription(customer_id, status);
+CREATE INDEX sub_status_due_idx ON subscription(status, next_billing_at);
+CREATE INDEX subs_cust_status_idx ON subscription(customer_id, status);
 
 CREATE TABLE subscription_line (
     id UUID PRIMARY KEY,
-    subscription_id UUID NOT NULL REFERENCES subscription(id) ON DELETE RESTRICT,
+    subscription_id UUID NOT NULL REFERENCES subscription(id) ON DELETE CASCADE,
     line_number INTEGER NOT NULL CHECK (line_number > 0),
-    product_id UUID NULL REFERENCES product(id) ON DELETE SET NULL,
-    variant_id UUID NULL REFERENCES product_variant(id) ON DELETE SET NULL,
+    product_id UUID NULL REFERENCES product(id) ON DELETE RESTRICT,
+    variant_id UUID NULL REFERENCES product_variant(id) ON DELETE RESTRICT,
+    plan_id UUID NULL REFERENCES plan(id) ON DELETE RESTRICT,
     description VARCHAR(500) NOT NULL,
     quantity NUMERIC(12,3) NOT NULL CHECK (quantity > 0),
     unit_price NUMERIC(14,2) NOT NULL CHECK (unit_price >= 0),
@@ -231,22 +241,24 @@ CREATE TABLE subscription_line (
 );
 
 CREATE TABLE subscription_line_tax_rule (
+    id UUID PRIMARY KEY,
     subscription_line_id UUID NOT NULL REFERENCES subscription_line(id) ON DELETE CASCADE,
     tax_rule_id UUID NOT NULL REFERENCES tax_rule(id) ON DELETE RESTRICT,
-    PRIMARY KEY (subscription_line_id, tax_rule_id)
+    UNIQUE (subscription_line_id, tax_rule_id)
 );
 
 CREATE TABLE subscription_event (
     id UUID PRIMARY KEY,
-    subscription_id UUID NOT NULL REFERENCES subscription(id) ON DELETE RESTRICT,
-    from_status VARCHAR(16) NULL,
+    subscription_id UUID NOT NULL REFERENCES subscription(id) ON DELETE CASCADE,
+    from_status VARCHAR(16) NOT NULL DEFAULT '',
     to_status VARCHAR(16) NOT NULL,
     action VARCHAR(32) NOT NULL,
-    note TEXT NOT NULL DEFAULT '',
+    note VARCHAR(500) NOT NULL DEFAULT '',
     actor_id BIGINT NULL REFERENCES account_user(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX subscription_event_history_idx ON subscription_event(subscription_id, created_at);
+CREATE INDEX subscription_customer_status_idx ON subscription(customer_id, status);
 
 CREATE TABLE billing_run (
     id UUID PRIMARY KEY,
@@ -266,7 +278,7 @@ CREATE TABLE invoice (
     id UUID PRIMARY KEY,
     number VARCHAR(40) NOT NULL UNIQUE,
     customer_id UUID NOT NULL REFERENCES customer(id) ON DELETE RESTRICT,
-    subscription_id UUID NOT NULL REFERENCES subscription(id) ON DELETE RESTRICT,
+    subscription_id UUID NOT NULL REFERENCES subscription(id) ON DELETE CASCADE,
     billing_run_id UUID NULL REFERENCES billing_run(id) ON DELETE SET NULL,
     billing_period_start DATE NOT NULL,
     billing_period_end DATE NOT NULL,

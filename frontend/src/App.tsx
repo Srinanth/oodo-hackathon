@@ -5,6 +5,11 @@ import CatalogPage from './features/catalog/CatalogPage'
 import DiscountsPage from './features/discounts/DiscountsPage'
 import { FinanceReportPage } from './features/finance/FinanceReportPage'
 import { InvoiceListPage } from './features/invoices/InvoiceListPage'
+import CustomersPage from './features/customers/CustomersPage'
+import QuoteTemplatesPage from './features/quotes/QuoteTemplatesPage'
+import QuotesPage from './features/quotes/QuotesPage'
+import { SubscriptionsPage } from './features/subscriptions/SubscriptionsPage'
+import { CustomerPortalPage } from './features/portal/CustomerPortalPage'
 import PlansPage from './features/plans/PlansPage'
 import StaffPage from './features/staff/StaffPage'
 import TaxPage from './features/tax/TaxPage'
@@ -111,6 +116,9 @@ function App() {
 
   if (user) {
     const workspacePath = path.replace(/\/+$/, '') || '/'
+    if (user.role === 'customer' && ['/app', '/portal'].includes(workspacePath)) {
+      return <CustomerPortalPage onLogout={() => void handleLogout()} />
+    }
     if (['/billing-runs', '/invoices', '/reports/finance'].includes(workspacePath) && ['admin', 'staff'].includes(user.role)) {
       return (
         <div className="min-h-dvh bg-slate-50/60">
@@ -152,6 +160,18 @@ function App() {
     if (path.replace(/\/+$/, '') === '/staff' && user.role === 'admin') {
       return <StaffPage onBack={() => navigate('/app')} />
     }
+    if (workspacePath === '/customers' && ['admin', 'staff'].includes(user.role)) {
+      return <CustomersPage onBack={() => navigate('/app')} />
+    }
+    if (workspacePath === '/quotes' && ['admin', 'staff'].includes(user.role)) {
+      return <QuotesPage onBack={() => navigate('/app')} />
+    }
+    if (workspacePath === '/quote-templates' && ['admin', 'staff'].includes(user.role)) {
+      return <QuoteTemplatesPage onBack={() => navigate('/app')} />
+    }
+    if (workspacePath === '/subscriptions' && ['admin', 'staff'].includes(user.role)) {
+      return <SubscriptionsPage onBack={() => navigate('/app')} />
+    }
     return (
       <main className="min-h-dvh bg-[#f5f6fa] px-4 py-7 sm:px-8 sm:py-10">
         <section className="mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-10">
@@ -177,6 +197,11 @@ function App() {
           <div className="py-10">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm font-medium text-indigo-700">Signed in as {user.role}</p>
+              {['admin', 'staff'].includes(user.role) && <button type="button" onClick={() => navigate('/customers')} className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">Customers</button>}
+              {['admin', 'staff'].includes(user.role) && <button type="button" onClick={() => navigate('/quote-templates')} className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">Quote templates</button>}
+              {['admin', 'staff'].includes(user.role) && <button type="button" onClick={() => navigate('/quotes')} className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">Quotes</button>}
+              {['admin', 'staff'].includes(user.role) && <button type="button" onClick={() => navigate('/subscriptions')} className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">Subscriptions</button>}
+              {user.role === 'customer' && <button type="button" onClick={() => navigate('/portal')} className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">Customer portal</button>}
               {['admin', 'staff'].includes(user.role) && (
                 <button
                   type="button"

@@ -1,10 +1,10 @@
-from rest_framework.permissions import SAFE_METHODS, BasePermission
+from rest_framework.permissions import BasePermission
 
 from apps.accounts.models import User
 
 
 class CanManageQuoteTemplates(BasePermission):
-    message = "Only administrators can create quotation templates."
+    message = "Only staff and administrators can manage quotation templates."
 
     def has_permission(self, request, view):
         user = request.user
@@ -12,4 +12,4 @@ class CanManageQuoteTemplates(BasePermission):
             return False
         if user.role not in (User.Role.ADMIN, User.Role.STAFF):
             return False
-        return request.method in SAFE_METHODS or user.role == User.Role.ADMIN
+        return True

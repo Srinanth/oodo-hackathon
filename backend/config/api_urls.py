@@ -31,5 +31,7 @@ urlpatterns = [
         account_views.password_reset,
         name="auth-password-reset",
     ),
+    path("", include("apps.customers.urls")),
+    path("", include("apps.subscriptions.urls")),
     path("", include("apps.billing.urls")),
 ]

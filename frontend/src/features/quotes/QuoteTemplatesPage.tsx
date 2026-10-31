@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { ApiError } from '../../lib/api'
+import { QuoteLineEditor, type QuoteLineDraft } from './QuoteLineEditor'
 import {
   createQuoteTemplate,
   getQuoteTemplates,
@@ -14,7 +15,7 @@ function errorMessage(error: unknown) {
   return 'Something went wrong. Please try again.'
 }
 
-function QuoteTemplatesPage() {
+function QuoteTemplatesPage({ onBack }: { onBack: () => void }) {
   const [templates, setTemplates] = useState<QuoteTemplate[]>([])
   const [editing, setEditing] = useState<QuoteTemplate | null>(null)
   const [search, setSearch] = useState('')
@@ -23,6 +24,7 @@ function QuoteTemplatesPage() {
   const [name, setName] = useState('')
   const [validityDays, setValidityDays] = useState('14')
   const [paymentTerms, setPaymentTerms] = useState('')
+  const [lines, setLines] = useState<QuoteLineDraft[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -33,6 +35,7 @@ function QuoteTemplatesPage() {
     setName('')
     setValidityDays('14')
     setPaymentTerms('')
+    setLines([])
     setError(null)
     setNotice(null)
   }
@@ -42,6 +45,7 @@ function QuoteTemplatesPage() {
     setName(template.name)
     setValidityDays(String(template.validityDays))
     setPaymentTerms(template.paymentTerms)
+    setLines(template.lines.map((line) => ({ planId: line.planId, productId: line.productId, variantId: line.variantId, description: line.description, quantity: line.quantity, taxRuleIds: line.taxRuleIds.map(String) })))
     setError(null)
     setNotice(null)
   }
@@ -75,6 +79,7 @@ function QuoteTemplatesPage() {
         name: name.trim(),
         validityDays: Number(validityDays),
         paymentTerms: paymentTerms.trim(),
+        lines,
       }
       if (editing) {
         await updateQuoteTemplate(editing.id, input)
@@ -87,6 +92,7 @@ function QuoteTemplatesPage() {
       setName('')
       setValidityDays('14')
       setPaymentTerms('')
+      setLines([])
       setCursor(null)
       const page = await getQuoteTemplates(search, null)
       setTemplates(page.items)
@@ -102,10 +108,11 @@ function QuoteTemplatesPage() {
     <main className="min-h-screen bg-[#f5f7fb] text-slate-900">
       <div className="mx-auto max-w-[1280px] px-5 py-8 sm:px-8 lg:px-10">
         <header className="mb-8">
+          <button type="button" onClick={onBack} className="mb-4 text-sm font-semibold text-indigo-700 hover:text-indigo-900">← Workspace</button>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">Brightloop · Sales</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">Quotation templates</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-500">
-            Set reusable offer terms and validity periods. Product and plan lines will be added when catalog setup is available.
+            Set reusable offer terms, validity periods, and default priced lines.
           </p>
         </header>
 
@@ -202,6 +209,7 @@ function QuoteTemplatesPage() {
                 <span className="mb-1.5 block text-sm font-medium text-slate-700">Payment terms</span>
                 <textarea maxLength={200} rows={3} value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)} placeholder="Net 30" className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" />
               </label>
+              <QuoteLineEditor lines={lines} currency="USD" onChange={setLines} />
               <button disabled={saving} type="submit" className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
                 {saving ? 'Saving…' : editing ? 'Save changes' : 'Create template'}
               </button>

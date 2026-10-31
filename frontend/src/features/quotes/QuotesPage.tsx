@@ -2,8 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import { ApiError } from '../../lib/api'
 import { getCustomers, type Customer } from '../customers/customersApi'
+import { QuoteLineEditor, type QuoteLineDraft } from './QuoteLineEditor'
 import { getQuoteTemplates, type QuoteTemplate } from './quoteTemplatesApi'
-import { createQuote, getQuotes, updateQuote, type Quote, type QuoteInput } from './quotesApi'
+import { confirmQuote, createQuote, getQuotes, sendQuote, updateQuote, type Quote, type QuoteInput } from './quotesApi'
 
 function errorMessage(error: unknown) {
   if (error instanceof ApiError) return error.message
@@ -17,7 +18,7 @@ function dateAfterDays(days: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-function QuotesPage() {
+function QuotesPage({ onBack }: { onBack: () => void }) {
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [templates, setTemplates] = useState<QuoteTemplate[]>([])
@@ -28,8 +29,11 @@ function QuotesPage() {
   const [customerId, setCustomerId] = useState('')
   const [templateId, setTemplateId] = useState('')
   const [validUntil, setValidUntil] = useState(dateAfterDays(14))
+  const [expiryDate, setExpiryDate] = useState('')
   const [paymentTerms, setPaymentTerms] = useState('')
   const [currency, setCurrency] = useState('USD')
+  const [lines, setLines] = useState<QuoteLineDraft[]>([])
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -66,8 +70,10 @@ function QuotesPage() {
     setCustomerId('')
     setTemplateId('')
     setValidUntil(dateAfterDays(14))
+    setExpiryDate('')
     setPaymentTerms('')
     setCurrency('USD')
+    setLines([])
     setError(null)
     setNotice(null)
   }
@@ -77,8 +83,10 @@ function QuotesPage() {
     setCustomerId(quote.customerId)
     setTemplateId(quote.templateId ?? '')
     setValidUntil(quote.validUntil)
+    setExpiryDate(quote.expiryDate ?? '')
     setPaymentTerms(quote.paymentTerms)
     setCurrency(quote.currency)
+    setLines(quote.lines.map((line) => ({ planId: line.planId, productId: line.productId, variantId: line.variantId, description: line.description, quantity: line.quantity, taxRuleIds: line.taxRules.map((tax) => tax.taxRuleId).filter((id): id is string => Boolean(id)) })))
     setError(null)
     setNotice(null)
   }
@@ -89,6 +97,7 @@ function QuotesPage() {
     if (template) {
       setPaymentTerms(template.paymentTerms)
       setValidUntil(dateAfterDays(template.validityDays))
+      setLines(template.lines.map((line) => ({ planId: line.planId, productId: line.productId, variantId: line.variantId, description: line.description, quantity: line.quantity, taxRuleIds: line.taxRuleIds.map(String) })))
     }
   }
 
@@ -97,7 +106,7 @@ function QuotesPage() {
     setSaving(true)
     setError(null)
     setNotice(null)
-    const input: QuoteInput = { customerId, templateId: templateId || null, validUntil, paymentTerms: paymentTerms.trim(), currency: currency.trim().toUpperCase() }
+    const input: QuoteInput = { customerId, templateId: templateId || null, validUntil, expiryDate: expiryDate || null, paymentTerms: paymentTerms.trim(), currency: currency.trim().toUpperCase(), lines }
     try {
       let successMessage: string
       if (editing) {
@@ -120,13 +129,36 @@ function QuotesPage() {
     }
   }
 
+  async function transitionQuote(quote: Quote, action: 'send' | 'confirm') {
+    setActionLoading(quote.id)
+    setError(null)
+    setNotice(null)
+    try {
+      if (action === 'send') {
+        await sendQuote(quote.id)
+        setNotice(`${quote.number} marked as quotation. Email delivery is simulated.`)
+      } else {
+        const updated = await confirmQuote(quote.id)
+        setNotice(`${quote.number} confirmed and subscription ${updated.subscriptionId ?? ''} created.`)
+      }
+      const page = await getQuotes(search, null)
+      setQuotes(page.items)
+      setNextCursor(page.nextCursor)
+    } catch (actionError: unknown) {
+      setError(errorMessage(actionError))
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-900">
       <div className="mx-auto max-w-[1280px] px-5 py-8 sm:px-8 lg:px-10">
         <header className="mb-8">
+          <button type="button" onClick={onBack} className="mb-4 text-sm font-semibold text-indigo-700 hover:text-indigo-900">← Workspace</button>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">Brightloop · Sales</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">Draft quotes</h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-500">Create a quote header from a customer and reusable terms. Product lines and pricing become available after catalog integration.</p>
+          <p className="mt-2 max-w-2xl text-sm text-slate-500">Build a priced offer from your catalog, review tax snapshots, and move it through draft and quotation stages.</p>
         </header>
 
         {notice && <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</div>}
@@ -144,7 +176,11 @@ function QuotesPage() {
               ) : quotes.map((quote) => (
                 <article key={quote.id} className="flex flex-wrap items-center justify-between gap-4 px-6 py-5">
                   <div><div className="flex items-center gap-2"><h3 className="font-medium text-slate-900">{quote.number}</h3><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase text-slate-600">{quote.status}</span></div><p className="mt-1 text-sm text-slate-600">{quote.customerName}{quote.templateName ? ` · ${quote.templateName}` : ''}</p><p className="mt-1 text-xs text-slate-500">Valid until {quote.validUntil} · {quote.paymentTerms || 'No payment terms'}</p></div>
-                  {quote.status === 'draft' && <button type="button" onClick={() => editQuote(quote)} className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50">Edit draft</button>}
+                  <div className="flex flex-wrap gap-2">
+                    {quote.status === 'draft' && <button type="button" onClick={() => editQuote(quote)} className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50">Edit draft</button>}
+                    {quote.status === 'draft' && <button type="button" disabled={actionLoading === quote.id || quote.lines.length === 0} onClick={() => void transitionQuote(quote, 'send')} className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Send quote</button>}
+                    {quote.status === 'quotation' && <button type="button" disabled={actionLoading === quote.id} onClick={() => void transitionQuote(quote, 'confirm')} className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Confirm &amp; activate</button>}
+                  </div>
                 </article>
               ))}
             </div>
@@ -157,7 +193,9 @@ function QuotesPage() {
               <label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">Customer <span className="text-rose-500">*</span></span><select required value={customerId} onChange={(event) => setCustomerId(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm"><option value="">Select a customer</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.companyName || customer.contactName} · {customer.email}</option>)}</select></label>
               <label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">Template</span><select value={templateId} onChange={(event) => selectTemplate(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm"><option value="">No template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label>
               <label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">Valid until <span className="text-rose-500">*</span></span><input required type="date" min={dateAfterDays(0)} value={validUntil} onChange={(event) => setValidUntil(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm" /></label>
-              <div className="grid grid-cols-[1fr_100px] gap-3"><label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">Payment terms</span><input maxLength={200} value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)} placeholder="Net 30" className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm" /></label><label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">Currency</span><input required maxLength={3} minLength={3} value={currency} onChange={(event) => setCurrency(event.target.value.toUpperCase())} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm" /></label></div>
+              <label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">Subscription end date <span className="font-normal text-slate-400">(required for close-at-end plans)</span></span><input type="date" min={dateAfterDays(0)} value={expiryDate} onChange={(event) => setExpiryDate(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm" /></label>
+              <div className="grid grid-cols-[1fr_100px] gap-3"><label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">Payment terms</span><input maxLength={200} value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)} placeholder="Net 30" className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm" /></label><label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">Currency</span><input required maxLength={3} minLength={3} value={currency} onChange={(event) => { setCurrency(event.target.value.toUpperCase()); setLines([]) }} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm" /></label></div>
+              <QuoteLineEditor lines={lines} currency={currency} onChange={setLines} />
               <button disabled={saving || customers.length === 0} type="submit" className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Saving…' : editing ? 'Save draft' : 'Create draft'}</button>
             </form>
           </aside>

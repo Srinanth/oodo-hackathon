@@ -8,6 +8,18 @@ export type QuoteTemplate = {
   createdById: number | null
   createdAt: string
   updatedAt: string
+  lines: QuoteTemplateLine[]
+}
+
+export type QuoteTemplateLine = {
+  id?: string
+  lineNumber?: number
+  planId: string | null
+  productId: string | null
+  variantId: string | null
+  description: string
+  quantity: string
+  taxRuleIds: string[]
 }
 
 export type QuoteTemplatePage = {
@@ -19,6 +31,7 @@ export type QuoteTemplateInput = {
   name: string
   validityDays: number
   paymentTerms: string
+  lines: QuoteTemplateLine[]
 }
 
 export function getQuoteTemplates(search: string, cursor: string | null, signal?: AbortSignal) {
