@@ -6,6 +6,8 @@ import re
 from typing import Any, Callable, List, Optional
 import uuid
 
+from django.db.models import Q
+
 from django.apps import apps
 from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
@@ -188,7 +190,15 @@ def get_due_subscriptions(
 ) -> List[SubscriptionData]:
     """
     Retrieve subscriptions due for billing on or before the business date.
-    Supports pluggable subscription provider, Django model query, or DB query.
+
+    Selection criteria (all must hold):
+      - status is 'confirmed' or 'active'
+      - next_billing_at <= business_date (the subscription period is due)
+      - expiry_date is NULL or expiry_date >= business_date
+        (expired subscriptions are not billed)
+
+    Supports a pluggable subscription_provider callback, Django ORM query
+    with SELECT FOR UPDATE row locking, or a raw SQL fallback.
     """
     if subscription_provider is not None:
         return subscription_provider(business_date)
@@ -199,16 +209,41 @@ def get_due_subscriptions(
         qs = SubscriptionModel.objects.filter(
             status__in=["confirmed", "active"],
             next_billing_at__lte=business_date,
-        )
+        ).filter(
+            # Exclude subscriptions past their expiry date
+            Q(expiry_date__isnull=True) | Q(expiry_date__gte=business_date)
+        ).select_for_update(
+            # Row-level lock prevents concurrent billing workers from
+            # double-processing the same subscription.
+            skip_locked=True
+        ).order_by("next_billing_at", "id")
+
         if hasattr(SubscriptionModel, "lines"):
             qs = qs.prefetch_related("lines")
 
         results = []
         for sub in qs:
             name, email, address = fetch_customer_snapshots(sub.customer_id)
+
+            # Resolve interval from related plan when available
+            interval_unit = "monthly"
+            interval_count = 1
+            if hasattr(sub, "plan") and sub.plan is not None:
+                interval_unit = getattr(sub.plan, "interval_unit", "monthly") or "monthly"
+                interval_count = getattr(sub.plan, "interval_count", 1) or 1
+
             lines = []
             if hasattr(sub, "lines"):
                 for line in sub.lines.all():
+                    tax_rules = []
+                    # Resolve attached tax rules if the join table exists
+                    if hasattr(line, "tax_rules"):
+                        for tr in line.tax_rules.all():
+                            tax_rules.append({
+                                "id": tr.id,
+                                "name": tr.name,
+                                "rate_percent": str(tr.rate_percent),
+                            })
                     lines.append(
                         SubscriptionLineData(
                             line_number=line.line_number,
@@ -217,6 +252,7 @@ def get_due_subscriptions(
                             unit_price=Decimal(str(line.unit_price)),
                             currency=getattr(line, "currency", sub.currency),
                             product_id=getattr(line, "product_id", None),
+                            tax_rules=tax_rules,
                         )
                     )
             results.append(
@@ -232,12 +268,18 @@ def get_due_subscriptions(
                     expiry_date=getattr(sub, "expiry_date", None),
                     payment_terms=getattr(sub, "payment_terms", "Net 30"),
                     currency=getattr(sub, "currency", "USD"),
+                    interval_unit=interval_unit,
+                    interval_count=interval_count,
                     customer_name=name,
                     customer_email=email,
                     billing_address=address,
                     lines=lines,
                 )
             )
+        logger.info(
+            "get_due_subscriptions ORM: found %d due subscriptions for %s",
+            len(results), business_date,
+        )
         return results
     except (LookupError, ValueError, Exception):
         pass
@@ -247,13 +289,20 @@ def get_due_subscriptions(
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT id, number, customer_id, plan_id, status, start_date, expiry_date,
-                       next_period_start, next_billing_at, payment_terms, currency
-                FROM subscription
-                WHERE status IN ('confirmed', 'active') AND next_billing_at <= %s
-                ORDER BY next_billing_at, id
+                SELECT s.id, s.number, s.customer_id, s.plan_id, s.status,
+                       s.start_date, s.expiry_date, s.next_period_start,
+                       s.next_billing_at, s.payment_terms, s.currency,
+                       COALESCE(p.interval_unit, 'monthly') AS interval_unit,
+                       COALESCE(p.interval_count, 1)        AS interval_count
+                FROM subscription s
+                LEFT JOIN plan p ON p.id = s.plan_id
+                WHERE s.status IN ('confirmed', 'active')
+                  AND s.next_billing_at <= %s
+                  AND (s.expiry_date IS NULL OR s.expiry_date >= %s)
+                ORDER BY s.next_billing_at, s.id
+                FOR UPDATE OF s SKIP LOCKED
                 """,
-                [business_date],
+                [business_date, business_date],
             )
             rows = cursor.fetchall()
 
@@ -267,15 +316,41 @@ def get_due_subscriptions(
                 with connection.cursor() as cursor:
                     cursor.execute(
                         """
-                        SELECT line_number, product_id, description, quantity, unit_price, currency
-                        FROM subscription_line
-                        WHERE subscription_id = %s
-                        ORDER BY line_number
+                        SELECT sl.line_number, sl.product_id, sl.description,
+                               sl.quantity, sl.unit_price, sl.currency
+                        FROM subscription_line sl
+                        WHERE sl.subscription_id = %s
+                        ORDER BY sl.line_number
                         """,
                         [sub_id],
                     )
                     line_rows = cursor.fetchall()
                     for lr in line_rows:
+                        # Resolve tax rules for this subscription line
+                        tax_rules = []
+                        try:
+                            with connection.cursor() as tax_cursor:
+                                tax_cursor.execute(
+                                    """
+                                    SELECT tr.id, tr.name, tr.rate_percent
+                                    FROM subscription_line_tax_rule sltr
+                                    JOIN tax_rule tr ON tr.id = sltr.tax_rule_id
+                                    WHERE sltr.subscription_line_id = %s
+                                      AND tr.is_active = TRUE
+                                      AND (tr.active_from IS NULL OR tr.active_from <= %s)
+                                      AND (tr.active_until IS NULL OR tr.active_until >= %s)
+                                    """,
+                                    [lr[0] if isinstance(lr[0], uuid.UUID) else sub_id, business_date, business_date],
+                                )
+                                for tr_row in tax_cursor.fetchall():
+                                    tax_rules.append({
+                                        "id": tr_row[0],
+                                        "name": tr_row[1],
+                                        "rate_percent": str(tr_row[2]),
+                                    })
+                        except Exception:
+                            pass
+
                         lines.append(
                             SubscriptionLineData(
                                 line_number=lr[0],
@@ -284,6 +359,7 @@ def get_due_subscriptions(
                                 quantity=Decimal(str(lr[3])),
                                 unit_price=Decimal(str(lr[4])),
                                 currency=lr[5] or row[10],
+                                tax_rules=tax_rules,
                             )
                         )
             except Exception:
@@ -302,12 +378,18 @@ def get_due_subscriptions(
                     next_billing_at=row[8],
                     payment_terms=row[9] or "Net 30",
                     currency=row[10] or "USD",
+                    interval_unit=row[11] or "monthly",
+                    interval_count=row[12] or 1,
                     customer_name=name,
                     customer_email=email,
                     billing_address=address,
                     lines=lines,
                 )
             )
+        logger.info(
+            "get_due_subscriptions SQL: found %d due subscriptions for %s",
+            len(results), business_date,
+        )
         return results
     except Exception:
         # Tables don't exist yet in DB
@@ -341,6 +423,17 @@ def advance_subscription_date(subscription_id: uuid.UUID, new_date: date) -> Non
         pass
 
 
+def _skip_expired_subscription(sub: SubscriptionData, business_date: date) -> bool:
+    """Return True if the subscription has expired and should be skipped."""
+    if sub.expiry_date and sub.expiry_date < business_date:
+        logger.info(
+            "Skipping subscription %s (%s): expired on %s, business_date=%s",
+            sub.id, sub.number, sub.expiry_date, business_date,
+        )
+        return True
+    return False
+
+
 def execute_billing_run(
     business_date: Any,
     triggered_by: Optional[Any] = None,
@@ -350,8 +443,24 @@ def execute_billing_run(
 ) -> BillingRun:
     """
     Executes a recurring billing run for the given business date.
-    Ensures idempotency: if an invoice already exists for (subscription_id, period_start),
-    no duplicate is created and the item status is marked 'already_exists'.
+
+    Idempotency guarantees:
+      1. Fast-path check: query for existing invoice by
+         (subscription_id, billing_period_start) before attempting creation.
+      2. Atomic savepoint: invoice creation + subscription date advancement
+         happen inside transaction.atomic().
+      3. IntegrityError catch: if a concurrent worker created the invoice
+         between our check and our INSERT, the unique constraint
+         'invoice_one_per_period' fires and we gracefully record
+         'already_exists' instead of failing.
+      4. Row-level locking: when using the ORM/SQL selection path,
+         SELECT FOR UPDATE SKIP LOCKED prevents two billing workers from
+         processing the same subscription simultaneously.
+
+    Subscription selection filter:
+      - Only 'confirmed' or 'active' subscriptions.
+      - next_billing_at <= business_date.
+      - expiry_date is NULL or >= business_date (expired subs excluded).
     """
     parsed_date = parse_business_date(business_date)
 
@@ -361,10 +470,15 @@ def execute_billing_run(
         triggered_by=triggered_by if getattr(triggered_by, "is_authenticated", False) else None,
         started_at=timezone.now(),
     )
+    logger.info("Billing run %s started for business_date=%s", billing_run.id, parsed_date)
 
     if subscriptions_override is not None:
         due_subscriptions = subscriptions_override
     else:
+        # NOTE: When using the ORM/SQL path, get_due_subscriptions acquires
+        # SELECT FOR UPDATE SKIP LOCKED on the subscription rows to serialize
+        # concurrent billing workers.  For subscriptions_override (tests),
+        # this lock is not held since the data is caller-supplied.
         due_subscriptions = get_due_subscriptions(
             parsed_date,
             subscription_provider=subscription_provider,
@@ -374,9 +488,23 @@ def execute_billing_run(
 
     invoices_created = 0
     failures = 0
+    skipped = 0
     failure_messages = []
 
     for sub in due_subscriptions:
+        # Guard: skip subscriptions that have expired (defense-in-depth;
+        # the selection query also filters these, but overrides may not).
+        if _skip_expired_subscription(sub, parsed_date):
+            BillingRunItem.objects.create(
+                billing_run=billing_run,
+                subscription_id=sub.id,
+                period_start=sub.next_period_start or sub.next_billing_at or parsed_date,
+                status=BillingRunItem.Status.SKIPPED,
+                error_message="Subscription expired before business date.",
+            )
+            skipped += 1
+            continue
+
         period_start = sub.next_period_start or sub.next_billing_at or parsed_date
         period_start, period_end = compute_period_bounds(
             period_start,
@@ -399,6 +527,10 @@ def execute_billing_run(
                     invoice=existing,
                     status=BillingRunItem.Status.ALREADY_EXISTS,
                 )
+                logger.debug(
+                    "[DRY-RUN] Sub %s period %s: invoice %s already exists",
+                    sub.id, period_start, existing.number,
+                )
             else:
                 BillingRunItem.objects.create(
                     billing_run=billing_run,
@@ -407,9 +539,17 @@ def execute_billing_run(
                     status=BillingRunItem.Status.CREATED,
                 )
                 invoices_created += 1
+                logger.debug(
+                    "[DRY-RUN] Sub %s period %s: would create invoice",
+                    sub.id, period_start,
+                )
             continue
 
-        # Check existing invoice first for fast-path idempotency
+        # ── Idempotency: fast-path check ────────────────────────────
+        # Before entering the atomic block, check if an invoice already
+        # exists for this (subscription, period).  This avoids taking a
+        # savepoint and doing the full calculation for the common retry
+        # scenario where the invoice was already created.
         existing_invoice = Invoice.objects.filter(
             subscription_id=sub.id,
             billing_period_start=period_start,
@@ -423,11 +563,43 @@ def execute_billing_run(
                 invoice=existing_invoice,
                 status=BillingRunItem.Status.ALREADY_EXISTS,
             )
+            logger.info(
+                "Idempotency: invoice %s already exists for sub %s period %s; skipping.",
+                existing_invoice.number, sub.id, period_start,
+            )
             continue
 
-        # Transactional creation per subscription with atomic savepoint
+        # ── Idempotency: atomic invoice creation ─────────────────────
+        # Wrap invoice creation + subscription advancement in a single
+        # atomic savepoint.  If a concurrent worker races past the
+        # fast-path check above, the unique constraint
+        # 'invoice_one_per_period' on (subscription_id,
+        # billing_period_start) will raise IntegrityError, caught below.
         try:
             with transaction.atomic():
+                # Re-check inside the savepoint for safety; this narrows
+                # the race window to practically zero.
+                recheck = Invoice.objects.filter(
+                    subscription_id=sub.id,
+                    billing_period_start=period_start,
+                ).select_for_update().first()
+
+                if recheck:
+                    # Created between the fast-path check and entering
+                    # the savepoint — treat as already_exists.
+                    BillingRunItem.objects.create(
+                        billing_run=billing_run,
+                        subscription_id=sub.id,
+                        period_start=period_start,
+                        invoice=recheck,
+                        status=BillingRunItem.Status.ALREADY_EXISTS,
+                    )
+                    logger.info(
+                        "Idempotency (recheck): invoice %s for sub %s period %s; skipping.",
+                        recheck.number, sub.id, period_start,
+                    )
+                    continue
+
                 due_date = compute_due_date(parsed_date, sub.payment_terms)
                 cust_name = sub.customer_name or f"Customer {str(sub.customer_id)[:8]}"
                 cust_email = sub.customer_email or "billing@example.com"
@@ -454,7 +626,6 @@ def execute_billing_run(
                 )
                 invoice.save()
 
-                lines_to_create = []
                 subtotal_acc = Decimal("0.00")
                 tax_acc = Decimal("0.00")
                 discount_acc = Decimal("0.00")
@@ -542,10 +713,19 @@ def execute_billing_run(
                     status=BillingRunItem.Status.CREATED,
                 )
                 invoices_created += 1
+                logger.info(
+                    "Created invoice %s for sub %s period %s..%s (run %s)",
+                    invoice.number, sub.id, period_start, period_end, billing_run.id,
+                )
 
         except IntegrityError as ie:
-            # Concurrency race: existing invoice was created concurrently
-            logger.info("Invoice already exists for subscription %s period %s: %s", sub.id, period_start, ie)
+            # Concurrency race: existing invoice was created between our
+            # recheck SELECT FOR UPDATE and the INSERT.  This is the
+            # last-resort idempotency safety net.
+            logger.info(
+                "Idempotency (IntegrityError): invoice already exists for sub %s period %s: %s",
+                sub.id, period_start, ie,
+            )
             existing = Invoice.objects.filter(
                 subscription_id=sub.id,
                 billing_period_start=period_start,
@@ -586,4 +766,9 @@ def execute_billing_run(
         billing_run.error_summary = "\n".join(failure_messages[:20])
 
     billing_run.save()
+    logger.info(
+        "Billing run %s finished: status=%s seen=%d created=%d skipped=%d failures=%d",
+        billing_run.id, billing_run.status, billing_run.subscriptions_seen,
+        invoices_created, skipped, failures,
+    )
     return billing_run

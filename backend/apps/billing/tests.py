@@ -213,6 +213,149 @@ class BillingServiceTests(TestCase):
         failed_item = run.items.get(status=BillingRunItem.Status.FAILED)
         self.assertTrue(len(failed_item.error_message) > 0)
 
+    def test_expired_subscription_is_skipped(self):
+        """A subscription whose expiry_date is before the business_date
+        must be skipped and recorded as SKIPPED, not FAILED or CREATED."""
+        expired_sub = SubscriptionData(
+            id=uuid.uuid4(),
+            number="SUB-EXPIRED",
+            customer_id=uuid.uuid4(),
+            plan_id=None,
+            status="active",
+            start_date=date(2026, 1, 1),
+            next_billing_at=date(2026, 11, 1),
+            next_period_start=date(2026, 11, 1),
+            expiry_date=date(2026, 10, 31),  # Expired yesterday
+            lines=[
+                SubscriptionLineData(
+                    line_number=1,
+                    description="Expired plan",
+                    quantity=Decimal("1.000"),
+                    unit_price=Decimal("50.00"),
+                )
+            ],
+        )
+        run = execute_billing_run(
+            business_date=self.business_date,
+            subscriptions_override=[expired_sub],
+        )
+        self.assertEqual(run.subscriptions_seen, 1)
+        self.assertEqual(run.invoices_created, 0)
+        self.assertEqual(run.failures, 0)
+        self.assertEqual(run.status, BillingRun.Status.COMPLETED)
+        item = run.items.get(subscription_id=expired_sub.id)
+        self.assertEqual(item.status, BillingRunItem.Status.SKIPPED)
+        self.assertIn("expired", item.error_message.lower())
+
+    def test_expired_sub_mixed_with_active(self):
+        """When one sub is expired and another is active, only the active
+        one produces an invoice; the expired one is SKIPPED."""
+        active_sub = self._sample_subscriptions()[0]
+        expired_sub = SubscriptionData(
+            id=uuid.uuid4(),
+            number="SUB-EXP-MIX",
+            customer_id=uuid.uuid4(),
+            plan_id=None,
+            status="active",
+            start_date=date(2026, 1, 1),
+            next_billing_at=date(2026, 11, 1),
+            expiry_date=date(2026, 10, 15),  # Well before business_date
+            lines=[
+                SubscriptionLineData(
+                    line_number=1,
+                    description="Old plan",
+                    quantity=Decimal("1.000"),
+                    unit_price=Decimal("100.00"),
+                )
+            ],
+        )
+        run = execute_billing_run(
+            business_date=self.business_date,
+            subscriptions_override=[active_sub, expired_sub],
+        )
+        self.assertEqual(run.subscriptions_seen, 2)
+        self.assertEqual(run.invoices_created, 1)
+        self.assertEqual(run.failures, 0)
+        self.assertTrue(run.items.filter(status=BillingRunItem.Status.SKIPPED).exists())
+        self.assertTrue(run.items.filter(status=BillingRunItem.Status.CREATED).exists())
+
+    def test_triple_retry_idempotency(self):
+        """Running the billing run three times for the same date still
+        produces exactly one invoice."""
+        subs = self._sample_subscriptions()
+        for _ in range(3):
+            execute_billing_run(
+                business_date=self.business_date,
+                subscriptions_override=subs,
+            )
+        self.assertEqual(
+            Invoice.objects.filter(subscription_id=self.sub_id).count(), 1,
+        )
+
+    def test_dry_run_then_real_run(self):
+        """A dry run does NOT create invoices; a subsequent real run does."""
+        subs = self._sample_subscriptions()
+
+        dry = execute_billing_run(
+            business_date=self.business_date,
+            subscriptions_override=subs,
+            dry_run=True,
+        )
+        self.assertEqual(dry.invoices_created, 1)  # predicted count
+        self.assertEqual(Invoice.objects.filter(subscription_id=self.sub_id).count(), 0)
+
+        real = execute_billing_run(
+            business_date=self.business_date,
+            subscriptions_override=subs,
+        )
+        self.assertEqual(real.invoices_created, 1)
+        self.assertEqual(Invoice.objects.filter(subscription_id=self.sub_id).count(), 1)
+
+    def test_tax_rules_snapshot_on_invoice_line(self):
+        """Tax rules attached to subscription lines are snapshotted as
+        InvoiceLineTax records on the generated invoice."""
+        from apps.billing.models import InvoiceLineTax
+
+        tax_id = uuid.uuid4()
+        sub = SubscriptionData(
+            id=uuid.uuid4(),
+            number="SUB-TAX",
+            customer_id=uuid.uuid4(),
+            plan_id=None,
+            status="active",
+            start_date=date(2026, 10, 1),
+            next_billing_at=date(2026, 11, 1),
+            next_period_start=date(2026, 11, 1),
+            customer_name="Tax Corp",
+            customer_email="tax@corp.com",
+            lines=[
+                SubscriptionLineData(
+                    line_number=1,
+                    description="Taxed service",
+                    quantity=Decimal("2.000"),
+                    unit_price=Decimal("100.00"),
+                    tax_rules=[
+                        {"id": tax_id, "name": "GST 10%", "rate_percent": "10.0000"},
+                    ],
+                )
+            ],
+        )
+        run = execute_billing_run(
+            business_date=self.business_date,
+            subscriptions_override=[sub],
+        )
+        self.assertEqual(run.invoices_created, 1)
+        invoice = Invoice.objects.get(subscription_id=sub.id)
+        # subtotal = 2 * 100 = 200, tax = 200 * 10% = 20
+        self.assertEqual(invoice.subtotal, Decimal("200.00"))
+        self.assertEqual(invoice.tax_total, Decimal("20.00"))
+        self.assertEqual(invoice.total, Decimal("220.00"))
+
+        tax_entry = InvoiceLineTax.objects.get(invoice_line__invoice=invoice)
+        self.assertEqual(tax_entry.name_snapshot, "GST 10%")
+        self.assertEqual(tax_entry.rate_percent_snapshot, Decimal("10.0000"))
+        self.assertEqual(tax_entry.amount, Decimal("20.00"))
+
 
 class ManagementCommandTests(TestCase):
     def test_run_billing_command(self):
