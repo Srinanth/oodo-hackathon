@@ -2,6 +2,8 @@
 
 This is the shared HTTP API contract for the MVP. Paths use `/api/v1`; JSON is UTF-8. The implementation is Django REST Framework with a same-origin React client, as recorded in [ADR-004](adr/ADR-004-selected-mvp-stack.md).
 
+Implement API handlers and domain services under `backend/`; implement views and API clients under `frontend/`. The reviewed persistence model lives in [`db/schema.sql`](../db/schema.sql) and [`db/schema.mmd`](../db/schema.mmd); Django models and migrations remain the executable schema source of truth.
+
 ## Conventions
 
 - Authenticate the same-origin browser app with Django sessions in secure, HTTP-only cookies and CSRF tokens on unsafe requests. Never accept a customer ID from the client as proof of ownership.

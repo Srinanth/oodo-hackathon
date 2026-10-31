@@ -1,0 +1,48 @@
+erDiagram
+  BUSINESS_PROFILE {
+    uuid id PK
+    string legal_name
+    string default_currency
+    string timezone
+  }
+  USER ||--o| CUSTOMER : owns
+  USER ||--o{ QUOTE : creates
+  USER ||--o{ SUBSCRIPTION_EVENT : changes
+  CUSTOMER ||--o{ QUOTE : receives
+  CUSTOMER ||--o{ SUBSCRIPTION : owns
+  CUSTOMER ||--o{ INVOICE : billed_to
+  QUOTE_TEMPLATE ||--o{ QUOTE_TEMPLATE_LINE : contains
+  QUOTE_TEMPLATE ||--o{ QUOTE : source
+  PRODUCT ||--o{ PRODUCT_VARIANT : offers
+  PRODUCT ||--o{ QUOTE_TEMPLATE_LINE : quoted
+  PLAN ||--o{ QUOTE_TEMPLATE_LINE : selects
+  QUOTE ||--|{ QUOTE_LINE : contains
+  PRODUCT ||--o{ QUOTE_LINE : priced_as
+  PRODUCT_VARIANT ||--o{ QUOTE_LINE : selected
+  PLAN ||--o{ QUOTE_LINE : priced_on
+  TAX_RULE ||--o{ QUOTE_LINE_TAX : calculated
+  QUOTE_LINE ||--o{ QUOTE_LINE_TAX : tax_snapshot
+  QUOTE ||--o| SUBSCRIPTION : converts
+  PLAN ||--o{ SUBSCRIPTION : governs
+  SUBSCRIPTION ||--|{ SUBSCRIPTION_LINE : contains
+  PRODUCT ||--o{ SUBSCRIPTION_LINE : billed_as
+  PRODUCT_VARIANT ||--o{ SUBSCRIPTION_LINE : selected
+  TAX_RULE ||--o{ SUBSCRIPTION_LINE_TAX_RULE : assigned
+  SUBSCRIPTION_LINE ||--o{ SUBSCRIPTION_LINE_TAX_RULE : taxed_by
+  SUBSCRIPTION ||--o{ SUBSCRIPTION_EVENT : records
+  SUBSCRIPTION ||--o{ INVOICE : generates
+  BILLING_RUN ||--o{ INVOICE : creates
+  BILLING_RUN ||--o{ BILLING_RUN_ITEM : tracks
+  SUBSCRIPTION ||--o{ BILLING_RUN_ITEM : processed
+  INVOICE ||--o| BILLING_RUN_ITEM : result
+  INVOICE ||--|{ INVOICE_LINE : contains
+  PRODUCT ||--o{ INVOICE_LINE : snapshot_source
+  TAX_RULE ||--o{ INVOICE_LINE_TAX : snapshot_source
+  INVOICE_LINE ||--o{ INVOICE_LINE_TAX : tax_snapshot
+  DISCOUNT_RULE ||--o{ INVOICE_DISCOUNT_LINE : snapshot_source
+  INVOICE ||--o{ INVOICE_DISCOUNT_LINE : discount_snapshot
+  DISCOUNT_RULE ||--o{ DISCOUNT_RULE_PRODUCT : targets
+  PRODUCT ||--o{ DISCOUNT_RULE_PRODUCT : eligible_product
+  DISCOUNT_RULE ||--o{ DISCOUNT_REDEMPTION : reserves
+  INVOICE ||--o{ DISCOUNT_REDEMPTION : consumes
+  INVOICE ||--o{ PAYMENT : paid_by

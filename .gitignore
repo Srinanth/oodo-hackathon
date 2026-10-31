@@ -1,0 +1,31 @@
+# Python / Django
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+/staticfiles/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Vite
+node_modules/
+frontend/dist/
+frontend/.vite/
+coverage/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Local database/container state
+pgdata/
+postgres-data/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

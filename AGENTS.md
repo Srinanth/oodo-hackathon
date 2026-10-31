@@ -2,6 +2,13 @@
 
 These rules apply to all agents working in this repository. The product requirements, domain boundaries, API contract, feature status, and architecture decisions are maintained in `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/FEATURE_TRACKER.md`, and `docs/adr/`.
 
+## Repository layout
+
+- `frontend/` contains the React + TypeScript + Vite client and client-side feature modules.
+- `backend/` contains the Django project, REST API, domain apps, and Django models/migrations.
+- `db/` contains the reviewed PostgreSQL schema reference and ER diagram. Django models and migrations in `backend/` are the executable source of truth; update the reference schema when those models change.
+- Keep frontend and backend in their respective folders. Do not create a second app or schema definition at repository root.
+
 ## Team and branches
 
 - Srinanth works on `dev/srinanth` only.
@@ -18,7 +25,7 @@ These rules apply to all agents working in this repository. The product requirem
 
 1. Read the relevant PRD requirements, architecture decision records, and API contract before changing a domain.
 2. Claim the feature in `docs/FEATURE_TRACKER.md` by setting its status to `In progress` and recording the owner. Avoid claiming work already owned by a teammate.
-3. Keep implementation inside the feature's domain and use the documented module/API seams. Propose a documentation change before changing a shared contract.
+3. Deliver the feature as a vertical slice across its assigned `frontend/` and `backend/` areas. Keep implementation inside the domain and use the documented module/API seams. Propose a documentation change before changing a shared contract.
 4. Finish the feature's acceptance criteria, review the complete diff for unrelated changes, and update the tracker to `Done` in the same feature commit.
 5. Make one descriptive commit for the completed feature. Include the feature ID in the message, for example `feat(SUB-01): implement subscription lifecycle`.
 6. Report the commit hash, completed criteria, verification performed, and any follow-up work. Do not claim completion when acceptance criteria remain open.

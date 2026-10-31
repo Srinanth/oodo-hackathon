@@ -4,7 +4,7 @@
 **Source:** `docs/Subscription_Management_System.pdf`
 **Team:** Srinanth, Angelo, Deepak
 
-See [API.md](API.md) for endpoint contracts, [FEATURE_TRACKER.md](FEATURE_TRACKER.md) for ownership and progress, and [adr/](adr/) for accepted architecture decisions.
+See [API.md](API.md) for endpoint contracts, [FEATURE_TRACKER.md](FEATURE_TRACKER.md) for full-stack ownership and progress, [adr/](adr/) for accepted architecture decisions, and [../db/](../db/) for the schema reference and ER diagram.
 
 ## 1. Architecture direction
 
@@ -59,82 +59,63 @@ flowchart LR
 
 The split assigns related features together and gives each person an end-to-end domain with user-visible work, business logic, persistence, and integration responsibilities. It is a proposed ownership plan; agree as a team before implementation.
 
-### Srinanth - Catalog, configuration, and access foundation
+### Srinanth - Platform foundation, catalog, configuration, and access
 
-- Product catalog, product types, variants, and configurable variant price adjustments.
-- Subscription plan configuration: price, billing interval, minimum quantity, availability, and end/pause/renew policy.
-- Tax rules and discount rule authoring/validation (including applicability, minimums, dates, and usage limits).
-- Authentication, account uniqueness, password policy/reset flow, role and permission model, admin-only staff creation.
-- Shared application shell/navigation and access-control middleware or policy layer.
-- Owns shared domain conventions: IDs, currency/decimal conventions, roles, and validation/error response shape.
+- **Backend (`backend/`):** Django project configuration; custom user/auth/roles/password reset; admin-created staff; product/variant pricing; plans; tax and discount configuration/eligibility; shared permission and error conventions.
+- **Frontend (`frontend/`):** Application shell, navigation, login/register/reset screens, role-aware layout, and catalog/variant/plan/tax/discount setup screens.
+- Owns the shared API/client conventions, ID/currency rules, and `db/` schema-reference coordination.
 
-**Deliverable:** Admin can configure the catalog, plans, tax/discount rules, and user access; common identity and authorization are usable by the other modules.
+**Deliverable:** A working application foundation and staff setup journey; the other domains can rely on shared auth, pricing, and access contracts.
 
 ### Angelo - Customer, quotation, subscription lifecycle, and portal
 
-- Customer profiles and customer account registration/association.
-- Quotation templates, quote editing, expiry, line items, and quote-to-subscription conversion.
-- Subscription lifecycle and valid transitions: Draft, Quotation, Confirmed, Active, Paused, Closed; renewal and early/end-date closure behavior.
-- Customer portal for viewing and managing only the authenticated customer's own subscriptions and invoices (invoice view supplied by the billing module).
-- Subscription detail and operational views for staff, including next billing date and current state.
-- Integration with catalog pricing, tax/discount eligibility, and billing's subscription contract.
+- **Backend (`backend/`):** Customer records/account association; quotation templates/quotes; quote pricing snapshot and conversion; subscription model, state transitions, renewal/pause/closure, next billing date; customer ownership-scoped APIs.
+- **Frontend (`frontend/`):** Customer management; quotation template and quote editor; quote-to-subscription screens; staff subscription list/detail/actions; customer portal for own subscriptions and invoices (invoice data supplied by Deepak).
+- Integrates with Srinanth's catalog/auth APIs and Deepak's billing subscription contract.
 
-**Deliverable:** Staff can create a quote and convert it to an active, traceable subscription; customers can securely inspect their own subscription information.
+**Deliverable:** Staff can complete quote-to-active-subscription; customers can securely use their portal.
 
 ### Deepak - Recurring billing, invoices, payments, and finance reporting
 
-- Billing schedule/run logic, due-subscription selection, invoice creation, retry safety, and run outcomes.
-- Invoice calculation from subscription lines, taxes and eligible discounts; invoice state/action flow (Draft, Confirmed, Paid; cancel/send/print).
-- Email/PDF adapter for invoice delivery/rendering, using a demo-safe provider configuration.
-- Payment records linked to invoices, balance/status calculation, and overdue identification.
-- Finance dashboard and filtered reports for active subscriptions, collected revenue, outstanding amounts, payments, and overdue invoices.
-- Performance work for report queries and indexes against the stated thousands-of-subscriptions target.
+- **Backend (`backend/`):** Billing run/management command; due-subscription selection and idempotency; invoice/tax/discount snapshots and state actions; payment records/balance/overdue logic; finance aggregation APIs; query/index work.
+- **Frontend (`frontend/`):** Billing run control and status/errors; invoice list/detail/actions/print view; payment recording; finance summary cards, filters, overdue queue, and charts/tables.
+- Integrates with Angelo's subscription contract and Srinanth's tax/discount/auth policies.
 
-**Deliverable:** A due subscription produces one correct invoice per period; staff can track payments and finance can see collection health.
+**Deliverable:** Staff can run/inspect billing, send or print correct invoices, record payments, and review collections.
 
 ### Shared work and seams
 
-- All three agree on the entity contracts and workflow states in section 4 before parallel implementation.
-- Each owner implements their module's UI/API/data logic and contributes a vertical slice to integration.
+- Keep `frontend/`, `backend/`, and `db/` separate; each owner delivers a full-stack slice by changing only their domain's frontend and backend modules plus the shared contracts they own.
+- Django models and migrations are the executable schema source of truth. Update `db/schema.sql` and `db/schema.mmd` in the same feature when persisted entities or relationships change.
+- All three agree on entity contracts and workflow states in section 4 before parallel implementation.
+- Each owner implements both UI and API/data logic for their feature and contributes a vertical slice to integration.
 - Srinanth reviews access-control integration; Angelo reviews subscription lifecycle integration; Deepak reviews invoice/payment calculation integration.
 - One shared demo seed dataset and one end-to-end walkthrough are maintained by the team together.
 - No domain is only documentation or glue work; each owner has core business logic and a demo-visible feature area.
 
 ## 4. Domain model
 
-```mermaid
-erDiagram
-  USER ||--o| CUSTOMER : represents
-  CUSTOMER ||--o{ QUOTE : receives
-  QUOTE ||--|{ QUOTE_LINE : contains
-  QUOTE }o--o| QUOTE_TEMPLATE : based_on
-  QUOTE ||--o| SUBSCRIPTION : converts_to
-  PLAN ||--o{ SUBSCRIPTION : selected_for
-  SUBSCRIPTION ||--|{ SUBSCRIPTION_LINE : contains
-  PRODUCT ||--o{ PRODUCT_VARIANT : has
-  PRODUCT ||--o{ SUBSCRIPTION_LINE : billed_as
-  SUBSCRIPTION ||--o{ INVOICE : generates
-  INVOICE ||--|{ INVOICE_LINE : contains
-  INVOICE ||--o{ PAYMENT : paid_by
-  TAX_RULE ||--o{ INVOICE_LINE : applied_to
-  DISCOUNT_RULE }o--o{ SUBSCRIPTION : eligible_for
-```
+The complete ER diagram is maintained once in [`db/schema.mmd`](../db/schema.mmd); its PostgreSQL table and constraint reference is [`db/schema.sql`](../db/schema.sql).
 
 ### Core records and constraints
 
 | Record | Key fields / constraints |
 |---|---|
+| BusinessProfile | Single company profile; default currency and IANA timezone |
 | User | email unique; password hash; role (`admin`, `staff`, `customer`); customer association for portal users |
 | Customer | contact details; optional linked user; customer data is the ownership boundary for portal access |
 | Product / Variant | name, type, sales price, cost price, notes; variant price adjustment stored as explicit amount/rule |
 | Plan | billing interval, price, minimum quantity, availability dates, close/pause/renew policy |
 | TaxRule | name, rate, active period/status; calculation behavior documented and versioned on invoice lines |
-| DiscountRule | fixed/percentage value, date window, minimum, usage limit/count, product or subscription scope |
-| Quote / QuoteLine | unique quote number, customer, validity dates, state, payment terms, line quantity/price/tax/amount |
+| DiscountRule / Redemption | fixed/percentage value, date window, minimum, usage limit, product/subscription scope; reserved/consumed/released usage |
+| QuoteTemplate / QuoteTemplateLine | reusable validity/payment terms and default product/plan lines |
+| Quote / QuoteLine / QuoteLineTax | unique quote number, customer, validity, state, payment terms, priced lines, tax snapshots |
 | Subscription / SubscriptionLine | unique subscription number, customer, plan, dates, state, billing anchor/next due date, terms and lines |
-| Invoice / InvoiceLine | unique invoice number; subscription and billing period; amounts, currency, state, due date; snapshot of prices/taxes/discounts |
+| SubscriptionEvent | transition/action history with actor, time, prior/new state, and note |
+| BillingRun / BillingRunItem | business date, status, counts, per-subscription result/error; supports retries and operations visibility |
+| Invoice / InvoiceLine / InvoiceLineTax / InvoiceDiscountLine | unique invoice number and subscription-period pair; due date/state; price, tax, discount, customer, and currency snapshots |
 | Payment | invoice, method, amount, date, note; amount is positive and does not exceed allowed balance unless overpayment behavior is explicitly supported |
-| BillingRun | run timestamp/date, status, counts, error summary; supports operational visibility and safe retry |
+| PasswordResetToken / AuditEvent | hashed single-use reset token with expiry; actor/action/entity audit trail |
 
 Financial records should snapshot applied unit prices, tax rates, discount values, currency, and customer billing details so later catalog edits do not rewrite history. Use fixed-precision decimal amounts.
 
