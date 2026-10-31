@@ -97,6 +97,8 @@ Intervals: `daily`, `weekly`, `monthly`, `yearly`. End policy: `close_at_end` or
 | `POST /subscriptions/{subscriptionId}/actions` | Staff or owning customer, per action policy | Pause, renew, close early, or request supported action |
 | `GET /portal/subscriptions` | Customer | List only current customer's subscriptions |
 
+Quote template list accepts `search`, `limit`, and `cursor` and returns `items` with a `nextCursor`. The initial template fields are `name`, `validityDays` (positive integer), and optional `paymentTerms`; the API records the creating administrator. Template product and plan lines are part of the quote editor integration.
+
 Customer list accepts `search`, `limit`, and `cursor` query parameters and returns `{"items": [...], "nextCursor": "..."}`. Search matches contact name, company name, email, and phone. Customer create/update uses camel-case fields (`companyName`, `contactName`, `email`, `phone`, `billingAddress`). Staff may set `accountUserEmail` to link an existing customer-role account, or `null` to clear the link; the database enforces one-to-one association. The portal customer endpoint ignores client-supplied customer IDs and resolves the linked record from the signed-in account.
 
 ```json
@@ -107,6 +109,16 @@ Customer list accepts `search`, `limit`, and `cursor` query parameters and retur
   "phone": "+1 555 0100",
   "billingAddress": "42 Main Street",
   "accountUserEmail": "avery@example.com"
+}
+```
+
+Quote template create example:
+
+```json
+{
+  "name": "Annual software offer",
+  "validityDays": 14,
+  "paymentTerms": "Net 30"
 }
 ```
 
