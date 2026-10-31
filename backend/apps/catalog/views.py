@@ -1,3 +1,106 @@
-from django.shortcuts import render
+import uuid
 
-# Create your views here.
+from django.db.models import Q
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+from apps.accounts.permissions import IsAdministrator, IsStaffReadAdminWrite
+from apps.catalog.models import Product, ProductVariant
+from apps.catalog.serializers import (
+    ProductSerializer,
+    ProductVariantCreateSerializer,
+    ProductVariantUpdateSerializer,
+    VariantReadSerializer,
+)
+
+
+def _page_params(request):
+    try:
+        limit = int(request.query_params.get("limit", "25"))
+    except ValueError as exc:
+        raise ValidationError({"limit": "Use an integer from 1 to 100."}) from exc
+    if limit < 1 or limit > 100:
+        raise ValidationError({"limit": "Use an integer from 1 to 100."})
+
+    cursor_value = request.query_params.get("cursor")
+    if not cursor_value:
+        return limit, None
+    try:
+        return limit, uuid.UUID(cursor_value)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ValidationError({"cursor": "This cursor is invalid."}) from exc
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated, IsStaffReadAdminWrite])
+def products(request):
+    if request.method == "GET":
+        limit, cursor = _page_params(request)
+        queryset = Product.objects.prefetch_related("variants").order_by("id")
+        if cursor:
+            queryset = queryset.filter(id__gt=cursor)
+        search = request.query_params.get("search", "").strip()
+        if search:
+            queryset = queryset.filter(Q(name__icontains=search) | Q(notes__icontains=search)).distinct()
+        page = list(queryset[: limit + 1])
+        has_more = len(page) > limit
+        page = page[:limit]
+        return Response({
+            "items": ProductSerializer(page, many=True).data,
+            "nextCursor": str(page[-1].id) if has_more and page else None,
+        })
+
+    serializer = ProductSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    product = serializer.save()
+    product = Product.objects.prefetch_related("variants").get(pk=product.pk)
+    return Response(ProductSerializer(product).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated, IsStaffReadAdminWrite])
+def product_detail(request, product_id):
+    try:
+        product = Product.objects.prefetch_related("variants").get(pk=product_id)
+    except Product.DoesNotExist as exc:
+        raise NotFound("Product not found.") from exc
+
+    if request.method == "GET":
+        return Response(ProductSerializer(product).data)
+
+    serializer = ProductSerializer(product, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    updated_product = serializer.save()
+    updated_product = Product.objects.prefetch_related("variants").get(pk=updated_product.pk)
+    return Response(ProductSerializer(updated_product).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsAdministrator])
+def product_variants(request, product_id):
+    try:
+        product = Product.objects.get(pk=product_id)
+    except Product.DoesNotExist as exc:
+        raise NotFound("Product not found.") from exc
+
+    serializer = ProductVariantCreateSerializer(data=request.data, context={"product": product})
+    serializer.is_valid(raise_exception=True)
+    variant = serializer.save()
+    return Response(VariantReadSerializer(variant).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated, IsAdministrator])
+def product_variant_detail(request, product_id, variant_id):
+    try:
+        variant = Product.objects.get(pk=product_id).variants.get(pk=variant_id)
+    except (Product.DoesNotExist, ProductVariant.DoesNotExist) as exc:
+        raise NotFound("Product variant not found.") from exc
+
+    serializer = ProductVariantUpdateSerializer(variant, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    updated_variant = serializer.save()
+    return Response(VariantReadSerializer(updated_variant).data)

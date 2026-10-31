@@ -24,6 +24,9 @@ coverage/
 # Local database/container state
 pgdata/
 postgres-data/
+.local-postgres-data/
+.local-postgres.log
+.pg-init-password.tmp
 
 # Editors and operating systems
 .vscode/

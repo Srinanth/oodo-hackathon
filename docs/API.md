@@ -50,6 +50,7 @@ Password-reset submission uses `{"uid":"...","token":"...","newPassword":"..."}`
 | `GET/POST /products` | Staff read / Admin write | List or create products |
 | `GET/PATCH /products/{productId}` | Staff read / Admin write | Read or update product |
 | `POST /products/{productId}/variants` | Admin | Add a variant with explicit configurable adjustment |
+| `PATCH /products/{productId}/variants/{variantId}` | Admin | Update or deactivate a variant |
 | `GET/POST /plans` | Staff read / Admin write | List or create plans |
 | `GET/PATCH /plans/{planId}` | Staff read / Admin write | Read or update plan |
 | `GET/POST /tax-rules` | Staff read / Admin write | List or create tax rules |
@@ -57,6 +58,8 @@ Password-reset submission uses `{"uid":"...","token":"...","newPassword":"..."}`
 | `POST /pricing/preview` | Staff | Calculate quote/line price, tax, and discount preview |
 
 Product example:
+
+Product listing accepts `limit` (default 25, maximum 100), opaque `cursor`, and optional `search`; it returns `items` and `nextCursor`. Product updates can change name, type, prices, notes, and active status. Deactivation is soft so historical quote/invoice references remain valid. Variants have a signed price adjustment in the product currency; active variant prices cannot be negative. Product and variant price values are decimal strings and are validated without floating-point arithmetic.
 
 ```json
 {

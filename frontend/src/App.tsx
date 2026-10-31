@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import AuthPage, { type AuthMode } from './features/auth/AuthPage'
+import CatalogPage from './features/catalog/CatalogPage'
 import StaffPage from './features/staff/StaffPage'
 import {
   getCurrentUser,
@@ -103,6 +104,9 @@ function App() {
   }
 
   if (user) {
+    if (path.replace(/\/+$/, '') === '/products' && ['admin', 'staff'].includes(user.role)) {
+      return <CatalogPage isAdmin={user.role === 'admin'} onBack={() => navigate('/app')} />
+    }
     if (path.replace(/\/+$/, '') === '/staff' && user.role === 'admin') {
       return <StaffPage onBack={() => navigate('/app')} />
     }
@@ -131,6 +135,15 @@ function App() {
           <div className="py-10">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm font-medium text-indigo-700">Signed in as {user.role}</p>
+              {['admin', 'staff'].includes(user.role) && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/products')}
+                  className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-100"
+                >
+                  Product catalog
+                </button>
+              )}
               {user.role === 'admin' && (
                 <button
                   type="button"
