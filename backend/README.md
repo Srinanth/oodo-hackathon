@@ -8,7 +8,7 @@ This folder is the Django 5.2 LTS + Django REST Framework application. Keep Djan
 
 From the repository root, run `docker compose up --build -d`. This starts PostgreSQL 18, Django, and the Vite development server; Django applies migrations when it starts. The frontend proxies API and health requests to the backend service. The app is at `http://localhost:5173`.
 
-To seed synthetic test accounts and catalog data, run `docker compose exec backend python manage.py seed_demo`, then follow [`../docs/DEMO.md`](../docs/DEMO.md). This Compose stack uses local-only credentials and must not be used with production data.
+To seed synthetic test accounts and catalog data, run `docker compose exec backend python manage.py seed_demo`, then follow [`../docs/DEMO.md`](../docs/DEMO.md). The repeatable seed also prepares customer records, quotes in multiple states, an active subscription, a current Draft invoice, paid/overdue invoice history, and payments. It only runs billing for its own seeded subscription. This Compose stack uses local-only credentials and must not be used with production data.
 
 ### Run Django on the host
 

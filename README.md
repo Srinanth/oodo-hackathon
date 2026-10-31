@@ -80,7 +80,7 @@ docker compose up --build -d
 docker compose exec backend python manage.py seed_demo
 ```
 
-The first command starts PostgreSQL, Django, and Vite; Django applies migrations before serving requests. The seed command prompts for a demo-only password. Open [http://localhost:5173](http://localhost:5173) and use the accounts listed in [`docs/DEMO.md`](docs/DEMO.md). The Compose database, password, and Django key are local test settings only.
+The first command starts PostgreSQL, Django, and Vite; Django applies migrations before serving requests. The seed command prompts for a demo-only password and creates role accounts plus sample customers, quotes, a subscription, invoices, and payments for the demo screens. Open [http://localhost:5173](http://localhost:5173) and follow the role-by-role walkthrough in [`docs/DEMO.md`](docs/DEMO.md). The Compose database, password, and Django key are local test settings only.
 
 To view service logs or stop the stack:
 
